@@ -146,7 +146,7 @@ st.title(" 🔋 Storage Sizing for a Solar System")
 if len(st.session_state.simulation_results_history)==0: 
     st.write(""" This simulation is based on the data of a full year of monitoring on real houses with PV production. 
             
-    In the menu on the left, you can vary various setting (the size of the battery, the prices...) and see the changes on the graphs below. 
+    In the menu on the left, you can vary various setting (the size of the battery, the prices, the datasets...) and see the changes on the graphs below. 
     The reference case is always the house with solar and the addition of storage is compared to it. If you change the solar (per example 200% to see what happens if you had 2 times mores solar), it becomes the new reference for storage evaluation.
         
     The relevant indicators are calculated:
@@ -521,6 +521,10 @@ hours_mean_df = df_pow_profile.resample('h', label="right", closed="right").mean
 day_kwh_df = hours_mean_df.resample('d').sum() 
 month_kwh_df = day_kwh_df.resample('ME').sum() 
 
+batt_throughput_energy = -month_kwh_df['Battery discharge power only'].sum()
+equivalent_80percent_cycles =  batt_throughput_energy / battery_size_kwh_usr_input / 0.8
+
+
 
 
 ####################
@@ -746,6 +750,8 @@ if opt_to_display_plots:
 
     fig_batt_soc = build_battery_SOC_min_max_analysis_figure(df_pow_profile)
     st.pyplot(fig_batt_soc)
+
+    st.write(f"The energy throughtput is {batt_throughput_energy :.0f} kWh and this is equivalent to {equivalent_80percent_cycles :.0f}  cycles at 80% DOD")
 
     fig_bat_inout = build_bat_inout_figure(day_kwh_df, month_kwh_df)
     st.pyplot(fig_bat_inout)
