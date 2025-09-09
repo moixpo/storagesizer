@@ -1,0 +1,9 @@
+pow1: MXP24, villa moderne, PAC, conso faible et optimisee solaire
+pow2: MAY24, villa 2000, PAC, voiture électrique
+pow3: LIN24, villa 1990, plaine, PAC
+pow4: ANTI24, ancienne grande maison, chauffage électrique
+pow5: BLA24, logement 1990+ entreprise
+
+
+
+
