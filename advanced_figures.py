@@ -294,3 +294,69 @@ def build_time_to_go_heatmap_figure(hours_mean_df):
    
     return fig_hours_heatmap
 
+
+
+
+
+def build_bat_inout_figure(day_kwh_df, month_kwh_df):
+
+    ##############################
+    #CHARGE/DISCHARGE ENERGY OF THE BATTERY AND TRHOUGHPUT
+    ################
+    
+    fig_bat_inout, axes_bat_inout = plt.subplots(nrows=2, ncols=1,figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT))
+    
+    
+    day_kwh_df['Abs Discharge']=-day_kwh_df['Battery discharge power only']
+    
+    
+    
+    day_kwh_df[['Battery charge power only','Abs Discharge']].plot(ax=axes_bat_inout[0],
+                          kind='line',
+                          marker='o',
+                          color=['g', 'r'])
+    
+    axes_bat_inout[0].legend(["CHARGE", "DISCHARGE"])
+    axes_bat_inout[0].grid(True)
+    #plt.xticks(np.arange(len(list(day_kwh_df.index))), labels=list(day_kwh_df.index.date), rotation=30, ha = 'center')        
+    axes_bat_inout[0].set_ylabel("Energy per day [kWh]", fontsize=12)
+    axes_bat_inout[0].set_title("How is the battery used? Daily and monthly cycling", fontsize=12, weight="bold")
+    
+    
+    
+    #to see both positive on the graph for better comparison:
+    dischargeEm=-month_kwh_df['Battery discharge power only']
+    chargeEm=month_kwh_df['Battery charge power only']
+    ind = np.arange(len(list(month_kwh_df.index.month_name())))
+    
+    
+    width = 0.35  # the width of the bars
+    b1=axes_bat_inout[1].bar(ind- width/2, chargeEm.values, width, color='g', label='CHARGE')
+    b2=axes_bat_inout[1].bar(ind+ width/2, dischargeEm.values, width, color='r', label='DISCHARGE')
+    
+    
+    
+    axes_bat_inout[1].set_ylabel("Energy per month [kWh]", fontsize=12)
+    #axes_bat_inout.legend(["CHARGE", "DISCHARGE"])
+    axes_bat_inout[1].legend()
+    axes_bat_inout[1].grid(True)
+    #plt.xticks(ind, labels=list(month_kwh_df.index.month_name()), rotation=30, ha = 'right')        
+    labels_month=list(month_kwh_df.index.month_name())
+    labels_year=list(month_kwh_df.index.year)
+    loc, label= plt.xticks()
+
+    for k,elem in enumerate(labels_month):
+        if elem=='January':
+            labels_month[k]=str(labels_year[k]) + ' January'
+            
+    
+    #TODO: remove comment: change the ticks first to units
+    #loc=[0, 1, 2]
+    loc=np.arange(len(labels_month))
+    plt.xticks(loc,labels=labels_month,rotation=35)
+
+
+    return fig_bat_inout
+
+
+

@@ -105,11 +105,11 @@ with st.sidebar:
     st.markdown("---")
     st.write("**👷 More Advanced settings** ")
 
-    batt_charge_power_rate_user_input = st.slider("Battery max charge power rate (C): ", min_value=0.1, max_value=2.0, value=0.5, step=0.10, help="C rate relates the battery capacity to the power it can give.")
+    batt_charge_power_rate_user_input = st.slider("Battery max charge power rate (C): ", min_value=0.1, max_value=2.0, value=0.5, step=0.05, help="C rate relates the battery capacity to the power it can give.")
     battery_charge_power_kw = batt_charge_power_rate_user_input * battery_size_kwh_usr_input
     st.write("The max charge/discharge power is set to " + f"{battery_charge_power_kw :.1f}"+" kW")
     st.write("C/2 would be a reasonable charge/discharge limit, note that this limit is applied all day")
-    batt_soc_for_backup_user_input = st.slider("Battery SOC kept for backup (%): ", min_value=10.0, max_value=100.0, value=20.0, step=1.0, help="Battery will not discharge below this SOC.")
+    batt_soc_for_backup_user_input = st.slider("Battery SOC reserved for backup (%): ", min_value=10.0, max_value=100.0, value=20.0, step=1.0, help="Battery will not discharge below this SOC.")
     st.write(f"The battery stops to discharge at this level, note that real battery don't go under {SOC_FOR_END_OF_DISCHARGE}%")
 
     st.write(" ")
@@ -144,16 +144,16 @@ with st.sidebar:
 st.title(" 🔋 Storage Sizing for a Solar System")
 
 if len(st.session_state.simulation_results_history)==0: 
-    st.write(""" This simulation is based on the data of a full year monitored on real houses with PV production. 
+    st.write(""" This simulation is based on the data of a full year of monitoring on real houses with PV production. 
             
-    In the settings on the left, you can vary various setting (the size of the battery, the prices...) to see the variants. 
+    In the menu on the left, you can vary various setting (the size of the battery, the prices...) and see the changes on the graphs below. 
     The reference case is always the house with solar and the addition of storage is compared to it. If you change the solar (per example 200% to see what happens if you had 2 times mores solar), it becomes the new reference for storage evaluation.
         
     The relevant indicators are calculated:
     - self-consumption rate
-    - self-sufficiency rate
+    - self-sufficiency rate ( also called autarky rate)
     - the electricity taken from the grid and its annual cost
-    - the electricity injected to the grid and its annual cost
+    - the electricity injected into the grid and its annual cost
     - the final bill (ex fixed fees) and the gain compared to the case without storage
 
     
@@ -339,7 +339,9 @@ df_pow_profile["Grid with storage"] = grid_power_with_storage_array
 
 battery_power_array = solar_system.clamped_batt_pow_profile
 df_pow_profile["Battery power"] = battery_power_array 
-
+#separate the positive and the negative power to compute charge and discharge energy:
+df_pow_profile["Battery discharge power only"] = df_pow_profile["Battery power"].mask(df_pow_profile["Battery power"] > 0, 0.0)
+df_pow_profile["Battery charge power only"] = df_pow_profile["Battery power"] .mask(df_pow_profile["Battery power"] < 0, 0.0)
 
 # Replace all negative values with 0 to have the consumption only
 df_pow_profile["Grid consumption with storage"] = df_pow_profile["Grid with storage"].mask(df_pow_profile["Grid with storage"] < 0, 0.0)
@@ -399,7 +401,7 @@ df_pow_profile["Energy to empty batt"] = (df_pow_profile["SOC"]- SOC_FOR_END_OF_
 #lets iterate that on the two in np:
 #TODO  
 energy_in_batt_array = df_pow_profile["Energy to empty batt"].values
-energy_in_comming_consumption = np.zeros(length_profile)
+energy_in_coming_consumption = np.zeros(length_profile)
 energy_to_go = np.zeros(length_profile)
 number_of_quarters = np.zeros(length_profile)
 
@@ -427,7 +429,7 @@ for energy in energy_in_batt_array:
 
     k=k+1
 
-df_pow_profile["Energy in comming consumption"] = energy_to_go
+df_pow_profile["Energy in coming consumption"] = energy_to_go
 
 #TODO  : correctif sur les dernières heures de l'année qui ont un time to go qui tombe à 0 à cause de la fin des données.
 number_of_quarters[-8] = number_of_quarters[-9] 
@@ -516,7 +518,9 @@ st.session_state.simulation_results_history.append({
 
 #save hours sampling for heatmap display:
 hours_mean_df = df_pow_profile.resample('h', label="right", closed="right").mean() 
-    
+day_kwh_df = hours_mean_df.resample('d').sum() 
+month_kwh_df = day_kwh_df.resample('ME').sum() 
+
 
 
 ####################
@@ -565,7 +569,7 @@ if st.session_state.simulation_results_history:
     cols = st.columns(2)
     with cols[0]:
         #st.metric("Valeur actuelle (kWh)", f"{battery_size_kwh_usr_input:.1f}")
-        st.write("Swipe one settings at a time and choose what you want to display accordingly to perform sensitivity analysis. Advice: reset to change view.")
+        st.write("Swipe one settings at a time and choose what you want to display accordingly to perform sensitivity analysis. Advice: reset when you want to explore another input.")
         list_of_channels_x = list(df_results.columns)[0:7]
         list_of_channels_y = list(df_results.columns)[7:-1]    
     
@@ -574,7 +578,7 @@ if st.session_state.simulation_results_history:
 
         if st.button("🔁 Reset (empty tracking)"):
             st.session_state.simulation_results_history = []
-            st.success("Historique réinitialisé.")
+            st.success("History cleared")
             st.rerun()
 
 
@@ -626,8 +630,8 @@ if "Consumption [kW]" in df_pow_profile.columns:
 
 
 #st.subheader(" The battery simulation")
-st.write("In this simulation the battery control is done like what do most of the inverter: charge as soon as there is solar excess and discharge as soon as there is not enough solar")
-st.write("This is not very intelligent and doesn't optimize special cases like peak shaving, dynamic prices, ...")
+st.write("In this simulation the battery control is done like what most of the inverters do: charge as soon as there is solar excess and discharge as soon as there is not enough solar. " \
+        "This is not very intelligent and doesn't optimize special cases like peak shaving, dynamic prices, ...")
     
             
 
@@ -672,7 +676,7 @@ st.write(f" Note: the selfconsumption power of storage system of {INVERTER_STAND
 st.markdown("---")
 st.subheader(" More plots to see  📈 📊 ")
 #**********************************
-opt_to_display_plots = st.checkbox("Show it, but that adds time to each simulation to display it")
+opt_to_display_plots = st.checkbox("Show it, but that adds time to each simulation to create and display it")
 
 if opt_to_display_plots:
 
@@ -718,7 +722,7 @@ if opt_to_display_plots:
     fig_batt_profile = px.area(df_pow_profile, 
                             x=df_pow_profile.index, 
                             y=[ "Battery power"], 
-                            title=" 🔋 charge of the battery", 
+                            title=" 🔋 Power of the battery", 
                             labels={"value": "Battery power [kW]", "variable": "Legend"}
     )
 
@@ -743,6 +747,8 @@ if opt_to_display_plots:
     fig_batt_soc = build_battery_SOC_min_max_analysis_figure(df_pow_profile)
     st.pyplot(fig_batt_soc)
 
+    fig_bat_inout = build_bat_inout_figure(day_kwh_df, month_kwh_df)
+    st.pyplot(fig_bat_inout)
 
 
     st.write(" **Some results**")
@@ -751,7 +757,7 @@ if opt_to_display_plots:
 
     st.markdown(f""" ***Reference***
     - The consumption of electricity for this period is {consumption_kWh:.2f} kWh 🔌
-    - The cost of grid electricity if there was no solar 🏭 would have been {cost_buying_no_solar_chf:.2f} CHF , mean price is {cost_buying_no_solar_chf/consumption_kWh:.3f} CHF/kWh
+    - The cost of grid electricity if there was no solar would have been {cost_buying_no_solar_chf:.2f} CHF , mean price is {cost_buying_no_solar_chf/consumption_kWh:.3f} CHF/kWh
     - The consumption of electricity on the grid for this period is {reference_grid_consumption_kWh:.2f} kWh with solar only
     - The cost of grid electricity is {cost_buying_solar_only_chf:.2f} CHF with solar only, mean price is {cost_buying_solar_only_chf/reference_grid_consumption_kWh:.3f} CHF/kWh
     - The sale of PV electricity is {sellings_solar_only_chf:.2f} CHF with solar only, mean price is {sellings_solar_only_chf/reference_grid_injection_kWh:.3f} CHF/kWh
@@ -790,7 +796,7 @@ if opt_to_display_peak:
     st.write(""" For special cases, where this is relevant, the following indicators are also computed:      
     - the peak power taken from the grid
     - the peak injection power
-    - the reserve time in case of blackout (how long is it possible to supply the comming consumption with the battery in islanding 🏝)
+    - the reserve time in case of blackout (how long is it possible to supply the coming consumption with the battery in islanding 🏝)
 
     But note that to optimize those points, an special control of the battery should be implemented 
     (per example not to charge the battery in the morning to avoid to be full at midday and give a high peak injection)    
@@ -798,7 +804,7 @@ if opt_to_display_peak:
     
     """)
 
-    st.markdown("<span style='color:red ; font-size:25pt'><b> TODO: Complete this part </b></span>", unsafe_allow_html=True)
+    #st.markdown("<span style='color:red ; font-size:25pt'><b> TODO: Complete this part </b></span>", unsafe_allow_html=True)
 
 
     st.write("📋 **Reference without storage, ☀️ only**")
@@ -855,10 +861,10 @@ if opt_to_display_bkup:
 
     st.write(""" Here the following indicator is also computed:      
 
-    - the reserve time on battery in case of blackout (how long is it possible to supply the comming consumption with the battery in islanding 🏝)
+    - the reserve time on battery in case of blackout (how long is it possible to supply the coming consumption with the battery in islanding 🏝 🏭)
 
     """)
-    st.markdown("<span style='color:red ; font-size:25pt'><b> TODO: Complete this part </b></span>", unsafe_allow_html=True)
+    #st.markdown("<span style='color:red ; font-size:25pt'><b> TODO: Complete this part </b></span>", unsafe_allow_html=True)
 
     # #Use Time  as index:
     # df_pow_profile = df_pow_profile.set_index("Time")
@@ -890,28 +896,28 @@ if opt_to_display_bkup:
 
 
 
+    # #For DEBUG: on the counted 
+    # # Energy Consumption Plot using Plotly
+    # fig_conso_coming = px.line(df_pow_profile, 
+    #                         x=df_pow_profile.index, 
+    #                         y=["Energy in coming consumption on the counted quarters", "Energy to empty batt"], 
+    #                         title=" Coming consumption", 
+    #                         labels={"value": "Com. Cons [kWh]", "variable": "Legend"},
+    #                         color_discrete_sequence=["red", "yellow"] 
+    # )
 
-    # Energy Consumption Plot using Plotly
-    fig_conso_coming = px.line(df_pow_profile, 
-                            x=df_pow_profile.index, 
-                            y=["Energy in comming consumption", "Energy to empty batt"], 
-                            title=" Comming consumption", 
-                            labels={"value": "Com. Cons [kWh]", "variable": "Legend"},
-                            color_discrete_sequence=["red", "yellow"] 
-    )
 
-
-    # Move legend below the graph
-    fig_conso_coming.update_layout(
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.2,  # Position below the graph
-            xanchor="center",
-            x=0.1
-        )
-    )
-    st.plotly_chart(fig_conso_coming)
+    # # Move legend below the graph
+    # fig_conso_coming.update_layout(
+    #     legend=dict(
+    #         orientation="h",
+    #         yanchor="top",
+    #         y=-0.2,  # Position below the graph
+    #         xanchor="center",
+    #         x=0.1
+    #     )
+    # )
+    # st.plotly_chart(fig_conso_coming)
 
 
     # Energy Consumption Plot using Plotly
@@ -1014,10 +1020,9 @@ st.title("Next steps 👨‍💻")
 
 st.write(""" Solar, storage and optimization: the smart control 🏆
          
-         The optimization is to come yet, the system sizing cannot be decoupled of the way is is operated, especially when there are multiple objectives like peakshaving, islanding, self-consumption and variable price optimization ...
-         The best energy management requires an optimization to obtain good results . 
-         This will be perfomed with day by day optimization.
-         It's less obvious, but not rocket science ;-) 
+         The system sizing cannot be decoupled of the way it is operated, especially when there are multiple objectives like peakshaving, islanding, self-consumption and variable price optimization ...
+         This daily energy management optimization is yet to come. It will be perfomed with day by day optimization.
+         That is where the different objectives are maried. It's less obvious, but not rocket science ;-) 
          
          Then there will be real world control: to apply this strategy to the inverter (next3 of Studer-Innotec of course...), 
          transmit the orders with the API or locally with Modbus... 
