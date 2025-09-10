@@ -89,15 +89,15 @@ with st.sidebar:
     st.write("your data set :", dataset_choice, " is measured on:")
     
     if dataset_choice == "House1.csv":
-        st.write("villa moderne, PAC, conso faible et optimisee solaire")
+        st.write("Modern house 2020, heat pump, low consumption already optimized for solar, 9.5kWp")
     elif dataset_choice == "House2.csv":
-        st.write("villa 2000, PAC, voiture électrique")
+        st.write("House of 2000's, heat pump, electric car charged at home, 14kWp")
     elif dataset_choice == "House3.csv":
-        st.write("villa 1990, plaine, PAC")
+        st.write("House 1990, heat pump")
     elif dataset_choice == "House4.csv":
-        st.write("ancienne grande maison, chauffage électrique")
+        st.write("Old house, electric heating for some parts")
     elif dataset_choice == "Building5.csv":
-        st.write("logement 1990 + entreprise")            
+        st.write("Building 1990 with one residential flat and a service entreprise in one floor")            
 
 
 
@@ -592,38 +592,29 @@ if st.session_state.simulation_results_history:
         #st.scatter_chart(ddf_resultsf, x=dataresults_x_axis, y=dataresults_y_axis)
 
         df_sorted = df_results.sort_values(dataresults_x_axis)
-        st.line_chart(df_sorted, 
-                    x=dataresults_x_axis, 
-                    y=dataresults_y_axis,
-                    x_label=dataresults_x_axis,
-                    y_label=dataresults_y_axis)
+        # st.line_chart(df_sorted, 
+        #             x=dataresults_x_axis, 
+        #             y=dataresults_y_axis,
+        #             x_label=dataresults_x_axis,
+        #             y_label=dataresults_y_axis)
+        
+        
+        fig_analysis = px.line(
+            df_sorted,
+            x=dataresults_x_axis,
+            y=dataresults_y_axis,
+            markers=True,  
+            labels={
+                dataresults_x_axis: dataresults_x_axis,
+                dataresults_y_axis: dataresults_y_axis,
+            },
+            title="Results analysis"
+        )
+
+        st.plotly_chart(fig_analysis, use_container_width=True)
+
 else:
     st.info("No data, move one setting on the left.")
-
-
-
-
-
-#The original data set
-# Combined Solar Power and Energy Consumption Plot using Plotly
-if "Consumption [kW]" in df_pow_profile.columns:
-    fig_combined = px.line(df_pow_profile, x=df_pow_profile.index, 
-                            y=["Solar power scaled", "Consumption [kW]"], 
-                            title="🌞 Solar Production vs ⚡ Energy Consumption", 
-                            labels={"value": "Power [kW]", "variable": "Legend"},
-                            color_discrete_sequence=["orange", "lightblue"] )
-    
-    # Move legend below the graph
-    fig_combined.update_layout(
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.2,  # Position below the graph
-            xanchor="center",
-            x=0.1
-        )
-    )
-    st.plotly_chart(fig_combined)
 
 
 
@@ -683,6 +674,29 @@ st.subheader(" More plots to see  📈 📊 ")
 opt_to_display_plots = st.checkbox("Show it, but that adds time to each simulation to create and display it")
 
 if opt_to_display_plots:
+
+
+    #The original data set
+    # Combined Solar Power and Energy Consumption Plot using Plotly
+    fig_combined = px.line(df_pow_profile, x=df_pow_profile.index, 
+                            y=["Solar power scaled", "Consumption [kW]"], 
+                            title="🌞 Solar Production vs ⚡ Energy Consumption", 
+                            labels={"value": "Power [kW]", "variable": "Legend"},
+                            color_discrete_sequence=["orange", "lightblue"] )
+    
+    # Move legend below the graph
+    fig_combined.update_layout(
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.2,  # Position below the graph
+            xanchor="center",
+            x=0.1
+        )
+    )
+    st.plotly_chart(fig_combined)
+
+
 
     #Plot the prices used:
     fig_levels = px.line(df_pow_profile, 
@@ -856,6 +870,55 @@ if opt_to_display_peak:
     fig_acsource_hours_heatmap = build_hours_grid_heatmap_figure(hours_mean_df)
     st.pyplot(fig_acsource_hours_heatmap)
 
+
+    st.subheader(" 🪓 Peak shaving input ")
+
+    st.write("Assessement of the energy in the peaks, cut down from the peak recorde")
+    peak_shaving_user_input = st.slider("🪓 Peak consumption shaving to (%): ", min_value=0.0, max_value=100.0, value=70.0, step=1.0)
+
+    st.markdown("---")
+
+
+    length_profile = len(df_pow_profile.index)
+    clipping_level = peak_shaving_user_input*peak_power_of_consumption/100.0
+    clipping_level_profile = np.ones(length_profile)* clipping_level
+    df_pow_profile["Clipping level"] = clipping_level_profile
+
+    #Make the clipping:
+    df_pow_profile["Clipped consumption"] = pow_array_all
+    df_pow_profile["Clipped consumption"] = df_pow_profile["Clipped consumption"].clip(upper=clipping_level)
+    df_pow_profile["peaks over limit"] = df_pow_profile["Consumption [kW]"]-df_pow_profile["Clipped consumption"]
+
+    clipped_consumption_kWh = df_pow_profile["Clipped consumption"].sum()/4.0
+    clipped_peaks_kWh = df_pow_profile["peaks over limit"].sum()/4.0
+
+    peak_e_ratio = (clipped_peaks_kWh)/consumption_kWh
+    clipping_losses2 = df_pow_profile["peaks over limit"].sum()/4.0/consumption_kWh
+
+    st.write(f"The consumption is shaved at  {clipping_level :.1f} kW ")
+
+    st.metric("Energy of peaks shaved", str(int(clipped_peaks_kWh))+" kWh", f"{-peak_e_ratio*100 :.1f}"+"%", delta_color="off")
+
+    fig_combined = px.line(df_pow_profile, x=df_pow_profile.index, 
+                            y=["Consumption [kW]", "Clipping level", "Clipped consumption"], 
+                            title="Consumption and clipping level", 
+                            labels={"value": "Power (kW)", "variable": "Legend"},
+                            color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
+    
+    # Move legend below the graph
+    fig_combined.update_layout(
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.2,  # Position below the graph
+            xanchor="center",
+            x=0.1
+        )
+    )
+    st.plotly_chart(fig_combined)
+
+
+st.write("How much energy is each of those peaks? here is the answer. But to cut them with a battery, we must be sure that the battery can recharge between two peaks")
 
 #**********************************
 st.markdown("---")
