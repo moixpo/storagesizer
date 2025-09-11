@@ -945,59 +945,59 @@ if opt_to_display_peak:
     st.plotly_chart(fig_combined)
 
 
-st.write("How much energy is in each of those peaks? That is an indication of the battery size for this task. But to really perfor this peak shaving with a battery, we must be sure that the battery can recharge between two peaks and the battery size necessary may be bigger that the peak size.")
+    st.write("How much energy is in each of those peaks? That is an indication of the battery size for this task. But to really perfor this peak shaving with a battery, we must be sure that the battery can recharge between two peaks and the battery size necessary may be bigger that the peak size.")
 
 
-number_of_peaks = 0
-largest_peak_kWh = 0.0 # TODO
+    number_of_peaks = 0
+    largest_peak_kWh = 0.0 # TODO
 
-integration_of_single_peaks = np.zeros(length_profile)
-k=0
-back_to_zero = False
+    integration_of_single_peaks = np.zeros(length_profile)
+    k=0
+    back_to_zero = False
 
-for value in df_pow_profile["peaks over limit"].values:
-    if value == 0.0 :
+    for value in df_pow_profile["peaks over limit"].values:
+        if value == 0.0 :
+            
+            integration_of_single_peaks[k] = 0.0
+            if back_to_zero: 
+                number_of_peaks = number_of_peaks + 1
+                back_to_zero = False
+        else: 
+            back_to_zero = True
+            integration_of_single_peaks[k] = value /4.0 + integration_of_single_peaks[k-1]
         
-        integration_of_single_peaks[k] = 0.0
-        if back_to_zero: 
-            number_of_peaks = number_of_peaks + 1
-            back_to_zero = False
-    else: 
-        back_to_zero = True
-        integration_of_single_peaks[k] = value /4.0 + integration_of_single_peaks[k-1]
-    
-    k = k + 1
+        k = k + 1
 
-df_pow_profile["integ of peaks"] = integration_of_single_peaks
-largest_peak_kWh = integration_of_single_peaks.max()
-#largest_peak_kWh = df_pow_profile["integ of peaks"].max()
+    df_pow_profile["integ of peaks"] = integration_of_single_peaks
+    largest_peak_kWh = integration_of_single_peaks.max()
+    #largest_peak_kWh = df_pow_profile["integ of peaks"].max()
 
-col1, col2, col3= st.columns(3)
-col1.metric("Number of peaks ", f" {number_of_peaks :.0f} peaks")
-col2.metric("The largest is", f" {largest_peak_kWh :.1f} kWh")
-col3.metric("Battery energy reserved needed", f" xxx kWh TODO" , f"{0.0 :.0f} % of total")
+    col1, col2, col3= st.columns(3)
+    col1.metric("Number of peaks ", f" {number_of_peaks :.0f} peaks")
+    col2.metric("The largest is", f" {largest_peak_kWh :.1f} kWh")
+    col3.metric("Battery energy reserved needed", f" xxx kWh TODO" , f"{0.0 :.0f} % of total")
 
-st.write("This part will be developped soon... ⏳️ ")
+    st.write("This part will be developped soon... ⏳️ ")
 
 
 
-fig_integ = px.line(df_pow_profile, x=df_pow_profile.index, 
-                        y=["peaks over limit", "integ of peaks"], 
-                        title="Peaks and their energy", 
-                        labels={"value": "Power (kW / kWh)", "variable": "Legend"},
-                        color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
+    fig_integ = px.line(df_pow_profile, x=df_pow_profile.index, 
+                            y=["peaks over limit", "integ of peaks"], 
+                            title="Peaks and their energy", 
+                            labels={"value": "Power (kW / kWh)", "variable": "Legend"},
+                            color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
 
-# Move legend below the graph
-fig_integ.update_layout(
-    legend=dict(
-        orientation="h",
-        yanchor="top",
-        y=-0.2,  # Position below the graph
-        xanchor="center",
-        x=0.1
+    # Move legend below the graph
+    fig_integ.update_layout(
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.2,  # Position below the graph
+            xanchor="center",
+            x=0.1
+        )
     )
-)
-st.plotly_chart(fig_integ)
+    st.plotly_chart(fig_integ)
 
 
 #**********************************
