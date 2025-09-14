@@ -89,7 +89,7 @@ with st.sidebar:
 
 
     st.markdown("---")
-    st.write("**Choose a dataset dataset 🏠** ")
+    st.write("**Choose a dataset  🏠** ")
 
     options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "Building5.csv"]
     dataset_choice = st.selectbox("Choose one option:", options)
