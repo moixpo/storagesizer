@@ -23,7 +23,7 @@ from advanced_figures import *
 INVERTER_STANDBY_W = 50  #Watts
 SOC_FOR_END_OF_DISCHARGE = 5.0  #for islanding case
 
-#EFFICIENCY_BATT_ONE_WAY = 0.95  #TODO make variable
+EFFICIENCY_BATT_ONE_WAY = 0.95  #TODO make variable, transmit to the battery simulation
 
 
 
@@ -82,14 +82,14 @@ with st.sidebar:
 
     if opt_to_use_peak_price:
         peak_price_usr_input = st.slider("Price for the peak power (CHF/kW/an): ", min_value=5.0, max_value=20.0, value=9.6, step=0.1) 
-        st.markdown(  "<span style='color:red; font-size:18pt'><b> WARNING, this price is not used in the final result yet </b></span>",  unsafe_allow_html=True)
+        st.markdown(  "<span style='color:red; font-size:18pt'><b> WARNING, this price and peak shaving are not used in the final result with a real batt simulation yet </b></span>",  unsafe_allow_html=True)
     else :
         peak_price_usr_input = 0.0
 
 
 
     st.markdown("---")
-    st.write("**Chose a dataset dataset 🏠** ")
+    st.write("**Choose a dataset dataset 🏠** ")
 
     options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "Building5.csv"]
     dataset_choice = st.selectbox("Choose one option:", options)
@@ -907,6 +907,7 @@ if opt_to_display_peak:
     df_pow_profile["Clipped consumption"] = pow_array_all
     df_pow_profile["Clipped consumption"] = df_pow_profile["Clipped consumption"].clip(upper=clipping_level)
     df_pow_profile["peaks over limit"] = df_pow_profile["Consumption [kW]"]-df_pow_profile["Clipped consumption"]
+    df_pow_profile["margin under limit"] = clipping_level - df_pow_profile["Clipped consumption"]
 
     clipped_consumption_kWh = df_pow_profile["Clipped consumption"].sum()/4.0
     clipped_peaks_kWh = df_pow_profile["peaks over limit"].sum()/4.0
@@ -922,7 +923,7 @@ if opt_to_display_peak:
     col1, col2, col3= st.columns(3)
     col1.metric("Peak ", f" {clipping_level :.1f} kW ", f"{peak_shaving_user_input - 100.0 :.0f} % reduction")
     col2.metric("Energy of all peaks shaved", str(int(clipped_peaks_kWh))+" kWh", f"{-peak_e_ratio*100 :.1f}"+"% of total energy", delta_color="off")
-    col3.metric("Peak Bill", f"{peak_power_of_consumption * peak_price_usr_input :.1f} CHF" , f"{peak_shaving_user_input - 100.0 :.0f} % reduction")
+    col3.metric("Peak Bill", f"{clipping_level * peak_price_usr_input :.1f} CHF" , f"{peak_shaving_user_input - 100.0 :.0f} % reduction")
 
 
 
@@ -952,37 +953,55 @@ if opt_to_display_peak:
     largest_peak_kWh = 0.0 # TODO
 
     integration_of_single_peaks = np.zeros(length_profile)
-    k=0
+    integration_of_recovery = np.zeros(length_profile)
+    integration_of_peaks_with_recovery = np.zeros(length_profile) #in this one we have to recover the energy with a factor EFFICIENCY_BATT_ONE_WAY^2
+    margin_to_recharge = df_pow_profile["margin under limit"].values
+
+    k = 0
+    n = 0
+
     back_to_zero = False
 
     for value in df_pow_profile["peaks over limit"].values:
         if value == 0.0 :
             
             integration_of_single_peaks[k] = 0.0
+            integration_of_recovery[k]  =  margin_to_recharge[k]/4 + integration_of_recovery[k-1]
+            integration_of_peaks_with_recovery[k] = integration_of_peaks_with_recovery[k-1] - margin_to_recharge[k] /4.0 * EFFICIENCY_BATT_ONE_WAY*EFFICIENCY_BATT_ONE_WAY
+            
+            if integration_of_peaks_with_recovery[k] < 0.0 :
+                integration_of_peaks_with_recovery[k] = 0.0
+
             if back_to_zero: 
                 number_of_peaks = number_of_peaks + 1
                 back_to_zero = False
         else: 
-            back_to_zero = True
             integration_of_single_peaks[k] = value /4.0 + integration_of_single_peaks[k-1]
-        
+            integration_of_peaks_with_recovery[k] = value /4.0 + integration_of_peaks_with_recovery[k-1]
+
+            integration_of_recovery[k] = 0.0
+            back_to_zero = True
+
         k = k + 1
 
     df_pow_profile["integ of peaks"] = integration_of_single_peaks
+    df_pow_profile["integ of recovery"] = integration_of_recovery
+    df_pow_profile["integ of peaks and recovery"] = integration_of_peaks_with_recovery
+
     largest_peak_kWh = integration_of_single_peaks.max()
+    battery_for_peak_shaving_kWh = integration_of_peaks_with_recovery.max()
+
     #largest_peak_kWh = df_pow_profile["integ of peaks"].max()
 
     col1, col2, col3= st.columns(3)
     col1.metric("Number of peaks ", f" {number_of_peaks :.0f} peaks")
     col2.metric("The largest is", f" {largest_peak_kWh :.1f} kWh")
-    col3.metric("Battery energy reserved needed", f" xxx kWh TODO" , f"{0.0 :.0f} % of total")
-
-    st.write("This part will be developped soon... ⏳️ ")
+    col3.metric("Battery energy reserved needed", f" {battery_for_peak_shaving_kWh :.1f} kWh " , f"{battery_for_peak_shaving_kWh / battery_size_kwh_usr_input *100 :.0f} % of total")
 
 
 
     fig_integ = px.line(df_pow_profile, x=df_pow_profile.index, 
-                            y=["peaks over limit", "integ of peaks"], 
+                            y=["peaks over limit", "integ of peaks", "integ of peaks and recovery"], 
                             title="Peaks and their energy", 
                             labels={"value": "Power (kW / kWh)", "variable": "Legend"},
                             color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
@@ -1183,6 +1202,8 @@ st.write(""" Solar, storage and optimization: the smart control 🏆
              but now all the pieces of the puzzle must be put together...  
          
          ...see you later """)
+
+st.write("This part will be developped soon... ⏳️ ")
 
 
 
