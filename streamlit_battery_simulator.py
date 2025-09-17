@@ -710,6 +710,41 @@ if opt_to_display_plots:
 
 
 
+    fig_hours_heatmap =  build_SOC_heatmap_figure(hours_mean_df)
+    st.pyplot(fig_hours_heatmap)
+
+    fig_batt_soc = build_battery_SOC_min_max_analysis_figure(df_pow_profile)
+    st.pyplot(fig_batt_soc)
+
+    st.write(f"The energy throughtput is {batt_throughput_energy :.0f} kWh and this is equivalent to {equivalent_80percent_cycles :.0f}  cycles at 80% DOD")
+
+    fig_bat_inout = build_bat_inout_figure(day_kwh_df, month_kwh_df)
+    st.pyplot(fig_bat_inout)
+
+
+
+    # Energy Consumption Plot using Plotly
+    fig_batt_profile = px.area(df_pow_profile, 
+                            x=df_pow_profile.index, 
+                            y=[ "Battery power"], 
+                            title=" 🔋 Power of the battery", 
+                            labels={"value": "Battery power [kW]", "variable": "Legend"}
+    )
+
+
+    # Move legend below the graph
+    fig_batt_profile.update_layout(
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.2,  # Position below the graph
+            xanchor="center",
+            x=0.1
+        )
+    )
+    st.plotly_chart(fig_batt_profile)
+
+
     #Plot the prices used:
     fig_levels = px.line(df_pow_profile, 
                                 x=df_pow_profile.index, 
@@ -748,39 +783,15 @@ if opt_to_display_plots:
 
 
 
-    # Energy Consumption Plot using Plotly
-    fig_batt_profile = px.area(df_pow_profile, 
-                            x=df_pow_profile.index, 
-                            y=[ "Battery power"], 
-                            title=" 🔋 Power of the battery", 
-                            labels={"value": "Battery power [kW]", "variable": "Legend"}
-    )
+
+    st.write("The consumption and production seen differently as heatmaps")
 
 
-    # Move legend below the graph
-    fig_batt_profile.update_layout(
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.2,  # Position below the graph
-            xanchor="center",
-            x=0.1
-        )
-    )
-    st.plotly_chart(fig_batt_profile)
-
-
-
-    fig_hours_heatmap =  build_SOC_heatmap_figure(hours_mean_df)
-    st.pyplot(fig_hours_heatmap)
-
-    fig_batt_soc = build_battery_SOC_min_max_analysis_figure(df_pow_profile)
-    st.pyplot(fig_batt_soc)
-
-    st.write(f"The energy throughtput is {batt_throughput_energy :.0f} kWh and this is equivalent to {equivalent_80percent_cycles :.0f}  cycles at 80% DOD")
-
-    fig_bat_inout = build_bat_inout_figure(day_kwh_df, month_kwh_df)
-    st.pyplot(fig_bat_inout)
+    fig_consumption_heatmap = build_consumption_heatmap_figure(hours_mean_df)
+    st.pyplot(fig_consumption_heatmap)
+    
+    fig_production_heatmap = build_production_heatmap_figure(hours_mean_df)
+    st.pyplot(fig_production_heatmap)
 
 
     st.write(" **Some results**")

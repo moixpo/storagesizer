@@ -79,6 +79,126 @@ def build_SOC_heatmap_figure(hours_mean_df):
 
 
 
+def build_production_heatmap_figure(hours_mean_df):
+    
+    all_channels_labels = list(hours_mean_df.columns)
+    channel_number_SOC = [i for i, elem in enumerate(all_channels_labels) if ('Solar power scaled' in elem) ]
+        
+    #print(all_channels_labels)
+    #print(channel_number_SOC)
+
+    # Resample the data to hourly intervals and aggregate using the mean or sum
+    #hourly_data = data.resample('H').mean()  # or data.resample('H').sum()
+    energies_by_hours=hours_mean_df[all_channels_labels[channel_number_SOC[0]]]
+
+    # Extract the values from the dataframe
+    consumption_data = energies_by_hours.values
+    print(consumption_data)
+
+    # Determine the shape of the reshaped array
+    n_days = len(consumption_data) // (24)
+    n_hours = 24
+    
+    # Reshape the data into a 2D array (days x hours)
+    consumption_data = consumption_data.reshape(n_days, n_hours)
+
+    #get the date of each day:
+    date_of_consumption_data = energies_by_hours.index.date
+    date_of_consumption_data= date_of_consumption_data.reshape(n_days, n_hours) #reshape to get one point each day
+    date_only= date_of_consumption_data[:,0] #take the first column
+    y_axis = np.arange(0,n_hours)
+    
+    
+    # Create the heatmap
+    fig_hours_heatmap, axe_hours_heatmap = plt.subplots(nrows=1, ncols=1, figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT))
+    pos = axe_hours_heatmap.pcolormesh(date_only, y_axis, consumption_data.transpose(), shading='auto', cmap='hot') #cmap='RdBu' cmap='hot' viridis, cmap = 'jet'
+      
+    #pos = axe_hours_heatmap.imshow(consumption_data.transpose(), cmap='jet', aspect='auto')  
+    
+    fig_hours_heatmap.suptitle('Consumption for each hour [kW] -[kWh]', fontweight = 'bold', fontsize = 12)
+      
+   
+    axe_hours_heatmap.set_xlabel('Day of the Year', fontsize=12)
+    axe_hours_heatmap.set_ylabel('Hour of the Day', fontsize=12)
+    axe_hours_heatmap.set_ylim(-0.5,23.5)
+    axe_hours_heatmap.set_yticks([0, 4, 8, 12, 16, 20])
+
+    #axe_hours_heatmap.set_title("Profile by hour ", fontsize=12, weight="bold")
+      
+    # Display the colorbar
+    cbar = fig_hours_heatmap.colorbar(pos, ax=axe_hours_heatmap)
+    cbar.set_label("kW  - kWh", rotation=270, labelpad=15)
+
+
+    
+    # fig_hours_heatmap.figimage(im, 10, 10, zorder=3, alpha=.2)
+    # fig_hours_heatmap.savefig("FigureExport/hours_soc_heatmap.png")
+
+   
+    return fig_hours_heatmap
+
+
+
+def build_consumption_heatmap_figure(hours_mean_df):
+    
+    all_channels_labels = list(hours_mean_df.columns)
+    channel_number_SOC = [i for i, elem in enumerate(all_channels_labels) if ('Consumption [kW]' in elem) ]
+        
+    #print(all_channels_labels)
+    #print(channel_number_SOC)
+
+    # Resample the data to hourly intervals and aggregate using the mean or sum
+    #hourly_data = data.resample('H').mean()  # or data.resample('H').sum()
+    energies_by_hours=hours_mean_df[all_channels_labels[channel_number_SOC[0]]]
+
+    # Extract the values from the dataframe
+    consumption_data = energies_by_hours.values
+    print(consumption_data)
+
+    # Determine the shape of the reshaped array
+    n_days = len(consumption_data) // (24)
+    n_hours = 24
+    
+    # Reshape the data into a 2D array (days x hours)
+    consumption_data = consumption_data.reshape(n_days, n_hours)
+
+    #get the date of each day:
+    date_of_consumption_data = energies_by_hours.index.date
+    date_of_consumption_data= date_of_consumption_data.reshape(n_days, n_hours) #reshape to get one point each day
+    date_only= date_of_consumption_data[:,0] #take the first column
+    y_axis = np.arange(0,n_hours)
+    
+    
+    # Create the heatmap
+    fig_hours_heatmap, axe_hours_heatmap = plt.subplots(nrows=1, ncols=1, figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT))
+    pos = axe_hours_heatmap.pcolormesh(date_only, y_axis, consumption_data.transpose(), shading='auto', cmap='jet') #cmap='RdBu' cmap='hot' viridis, cmap = 'jet'
+      
+    #pos = axe_hours_heatmap.imshow(consumption_data.transpose(), cmap='jet', aspect='auto')  
+    
+    fig_hours_heatmap.suptitle('Consumption for each hour [kW] -[kWh]', fontweight = 'bold', fontsize = 12)
+      
+   
+    axe_hours_heatmap.set_xlabel('Day of the Year', fontsize=12)
+    axe_hours_heatmap.set_ylabel('Hour of the Day', fontsize=12)
+    axe_hours_heatmap.set_ylim(-0.5,23.5)
+    axe_hours_heatmap.set_yticks([0, 4, 8, 12, 16, 20])
+
+    #axe_hours_heatmap.set_title("Profile by hour ", fontsize=12, weight="bold")
+      
+    # Display the colorbar
+    cbar = fig_hours_heatmap.colorbar(pos, ax=axe_hours_heatmap)
+    cbar.set_label("kW  - kWh", rotation=270, labelpad=15)
+
+
+    
+    # fig_hours_heatmap.figimage(im, 10, 10, zorder=3, alpha=.2)
+    # fig_hours_heatmap.savefig("FigureExport/hours_soc_heatmap.png")
+
+   
+    return fig_hours_heatmap
+
+
+
 def build_hours_grid_heatmap_figure(hours_mean_df):
     fig_acsource_hours_heatmap, axe_hours_heatmap_acsource = plt.subplots(nrows=1, ncols=1, figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT))
 
