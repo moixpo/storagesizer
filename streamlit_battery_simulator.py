@@ -91,7 +91,7 @@ with st.sidebar:
     st.markdown("---")
     st.write("**Choose a dataset  🏠** ")
 
-    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "Building5.csv"]
+    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv"]
     dataset_choice = st.selectbox("Choose one option:", options)
 
     st.write("your data set :", dataset_choice, " is measured on:")
@@ -104,7 +104,9 @@ with st.sidebar:
         st.write("House 1990, heat pump")
     elif dataset_choice == "House4.csv":
         st.write("Old house, electric heating for some parts")
-    elif dataset_choice == "Building5.csv":
+    elif dataset_choice == "House5.csv":
+        st.write("House of 2010, gaz heating, EV without charge synch with solar")
+    elif dataset_choice == "Building1.csv":
         st.write("Building 1990 with one residential flat and a service entreprise in one floor")            
 
 
