@@ -114,10 +114,9 @@ def build_production_heatmap_figure(hours_mean_df):
     pos = axe_hours_heatmap.pcolormesh(date_only, y_axis, consumption_data.transpose(), shading='auto', cmap='hot') #cmap='RdBu' cmap='hot' viridis, cmap = 'jet'
       
     #pos = axe_hours_heatmap.imshow(consumption_data.transpose(), cmap='jet', aspect='auto')  
+
     
-    fig_hours_heatmap.suptitle('Consumption for each hour [kW] -[kWh]', fontweight = 'bold', fontsize = 12)
-      
-   
+    fig_hours_heatmap.suptitle('Solar production for each hour [kW] -[kWh]', fontweight = 'bold', fontsize = 12)  
     axe_hours_heatmap.set_xlabel('Day of the Year', fontsize=12)
     axe_hours_heatmap.set_ylabel('Hour of the Day', fontsize=12)
     axe_hours_heatmap.set_ylim(-0.5,23.5)

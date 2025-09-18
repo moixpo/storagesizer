@@ -56,8 +56,32 @@ with st.sidebar:
     solar_scale_usr_input = st.slider("Solar installed (%): ", min_value=0.0, max_value=300.0, value=100.0, step=10.0)
     
     
+    
     st.markdown("---")
-    st.write("⚡💸 Electricity Prices ")
+    st.write("**Choose a dataset  🏠** ")
+
+    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv"]
+    dataset_choice = st.selectbox("Choose one option:", options)
+
+    st.write("your data set :", dataset_choice, " is measured on:")
+    
+    if dataset_choice == "House1.csv":
+        st.write("Modern house 2020, heat pump, low consumption already optimized for solar, 9.5kWp")
+    elif dataset_choice == "House2.csv":
+        st.write("House of 2000's, heat pump, electric car charged at home, 14kWp")
+    elif dataset_choice == "House3.csv":
+        st.write("House 1990, heat pump, EV")
+    elif dataset_choice == "House4.csv":
+        st.write("Old house, electric heating for some parts")
+    elif dataset_choice == "House5.csv":
+        st.write("House of 2010, gaz heating, EV without charge synch with solar")
+    elif dataset_choice == "Building1.csv":
+        st.write("Building 1990 with one residential flat and a service entreprise in one floor")            
+
+
+
+    st.markdown("---")
+    st.write("⚡💸 **Electricity Prices**")
     
     price_type_usr_input = st.radio(
         "Select your tarif",
@@ -88,29 +112,26 @@ with st.sidebar:
 
 
 
+
     st.markdown("---")
-    st.write("**Choose a dataset  🏠** ")
+    st.write("🔋💸 **Battery Price** ")
+    st.write("An linear regression is taken between the price for an 5kWh and 50kWh")
 
-    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv"]
-    dataset_choice = st.selectbox("Choose one option:", options)
+    batt_five_kWh_price_user_input = st.slider("Battery cost per kWh for 5 kWh (CHF): ", min_value=100.0, max_value=800.0, value=600.0, step=50.0, help="Variable price per kWh for a small battery")
+    batt_fifty_kWh_price_user_input = st.slider("Battery cost per kWh for 50 kWh (CHF): ", min_value=100.0, max_value=800.0, value=400.0, step=50.0, help="Variable price per kWh for a large battery")
+    batt_installation_price_user_input = st.slider("Battery fixed Installation cost (CHF): ", min_value=0.0, max_value=2000.0, value=1000.0, step=100.0, help="That is for the electrician and the controller")
+    price_slope = (batt_fifty_kWh_price_user_input-batt_five_kWh_price_user_input) / 45.0
+    zero_crossing_value = batt_five_kWh_price_user_input - price_slope * 5.0
 
-    st.write("your data set :", dataset_choice, " is measured on:")
-    
-    if dataset_choice == "House1.csv":
-        st.write("Modern house 2020, heat pump, low consumption already optimized for solar, 9.5kWp")
-    elif dataset_choice == "House2.csv":
-        st.write("House of 2000's, heat pump, electric car charged at home, 14kWp")
-    elif dataset_choice == "House3.csv":
-        st.write("House 1990, heat pump")
-    elif dataset_choice == "House4.csv":
-        st.write("Old house, electric heating for some parts")
-    elif dataset_choice == "House5.csv":
-        st.write("House of 2010, gaz heating, EV without charge synch with solar")
-    elif dataset_choice == "Building1.csv":
-        st.write("Building 1990 with one residential flat and a service entreprise in one floor")            
+    kWh_cost = zero_crossing_value + battery_size_kwh_usr_input * price_slope
+    batt_total_cost = batt_installation_price_user_input + battery_size_kwh_usr_input * kWh_cost
+    st.write(f"The {battery_size_kwh_usr_input :.0f} kWh battery is estimated at {kWh_cost :.0f} CHF/kWh and total cost {batt_total_cost:.0f} CHF")
 
 
-
+    st.markdown("---")
+    st.write("🌃 🪫 **Backup settings** ")
+    batt_soc_for_backup_user_input = st.slider("Battery SOC reserved for backup (%): ", min_value=10.0, max_value=100.0, value=20.0, step=1.0, help="Battery will not discharge below this SOC.")
+    st.write(f"The battery stops to discharge at this level, note that real battery don't go under {SOC_FOR_END_OF_DISCHARGE}%")
 
     st.markdown("---")
     st.write("**👷 More Advanced settings** ")
@@ -119,8 +140,6 @@ with st.sidebar:
     battery_charge_power_kw = batt_charge_power_rate_user_input * battery_size_kwh_usr_input
     st.write("The max charge/discharge power is set to " + f"{battery_charge_power_kw :.1f}"+" kW")
     st.write("C/2 would be a reasonable charge/discharge limit, note that this limit is applied all day")
-    batt_soc_for_backup_user_input = st.slider("Battery SOC reserved for backup (%): ", min_value=10.0, max_value=100.0, value=20.0, step=1.0, help="Battery will not discharge below this SOC.")
-    st.write(f"The battery stops to discharge at this level, note that real battery don't go under {SOC_FOR_END_OF_DISCHARGE}%")
 
     st.write(" ")
     soc_init_user_input = st.slider("Battery initial SOC for simulation (%): ", min_value=20.0, max_value=100.0, value=50.0, step=1.0)
@@ -142,7 +161,7 @@ with st.sidebar:
 
 
     st.markdown("---")
-    st.write("Battery sizer, version 0.1")
+    st.write("Battery sizer, version 0.2")
     st.write("✌️ Moix P-O, 2025")
     st.write("Streamlit for interactive dashboards...")
     
@@ -165,6 +184,7 @@ if len(st.session_state.simulation_results_history)==0:
     - the electricity taken from the grid and its annual cost
     - the electricity injected into the grid and its annual cost
     - the final bill (ex fixed fees) and the gain compared to the case without storage
+    - the cost of storage 
 
     
     Various interactive plots of the power fluxes are given to vizualize what happens exactly in the house. 
@@ -504,6 +524,10 @@ month_kwh_df = day_kwh_df.resample('ME').sum()
 batt_throughput_energy = -month_kwh_df['Battery discharge power only'].sum()
 equivalent_80percent_cycles =  batt_throughput_energy / battery_size_kwh_usr_input / 0.8
 
+#assuming the data are always for 1 full year: TODO make it in function of the data size
+cost_of_stored_kWh_over_15_years = batt_total_cost / 15.0 / batt_throughput_energy
+
+
 
 
 
@@ -525,10 +549,13 @@ st.session_state.simulation_results_history.append({
     "PV sell revenue with storage (CHF)": sim_sellings_solar_chf,
     "Cost Buying Electricity with storage(CHF)": sim_cost_buying_electricity_chf,
     "Bill with storage (CHF)": sim_bill, 
-    "Gain of Storage (CHF)": gain_of_storage, 
-    "Total gain of Solar and storage (CHF)": total_gain_of_solar_and_storage, 
+    "Gain of storage (CHF)": gain_of_storage, 
+    "Total gain of solar and storage (CHF)": total_gain_of_solar_and_storage, 
     "Throughput Energy (kWh)": batt_throughput_energy,
     "Number of equivalent 80% DOD cycles": equivalent_80percent_cycles,
+    "Battery total price (CHF)": batt_total_cost,
+    "Battery variable price (CHF/kWh)": kWh_cost,
+    "Cost of storage over 15 years (ct/kWh)": cost_of_stored_kWh_over_15_years*100.0,
     "Reference grid injection (kWh)": reference_grid_injection_kWh,
     "Reference grid consumption (kWh)": reference_grid_consumption_kWh,
     "Reference self-consumption (%)":reference_self_consumption_ratio, 
@@ -717,6 +744,9 @@ if opt_to_display_plots:
     st.pyplot(fig_batt_soc)
 
     st.write(f"The energy throughtput is {batt_throughput_energy :.0f} kWh and this is equivalent to {equivalent_80percent_cycles :.0f}  cycles at 80% DOD")
+
+    st.write(f"Over 15 years, that gives an cost of storage of {cost_of_stored_kWh_over_15_years*100.0 :.1f} ct/kWh, plus the value of the solar energy (with grid selling price here), the cost of stored energy is {(cost_of_stored_kWh_over_15_years*100.0 + fixed_price_sell_usr_input*100.0 ) :.0f}  ct/kWh")
+
 
     fig_bat_inout = build_bat_inout_figure(day_kwh_df, month_kwh_df)
     st.pyplot(fig_bat_inout)
@@ -1201,9 +1231,11 @@ st.title("Next steps 👨‍💻")
 
 st.write(""" Solar, storage and optimization: the smart control 🏆
          
-         The system sizing cannot be decoupled of the way it is operated, especially when there are multiple objectives like peakshaving, islanding, self-consumption and variable price optimization ...
+         The system sizing cannot be decoupled of the way it is operated, especially when there are multiple objectives 
+         like peakshaving, islanding, self-consumption and variable price optimization ...
+         Here an standard inverter behaviour was implemented.
          This daily energy management optimization is yet to come. It will be perfomed with day by day optimization.
-         That is where the different objectives are maried. It's less obvious, but not rocket science ;-) 
+         That is where the different objectives are married. It's less obvious, but not rocket science ;-) 
          
          Then there will be real world control: to apply this strategy to the inverter (next3 of Studer-Innotec of course...), 
          transmit the orders with the API or locally with Modbus... 
