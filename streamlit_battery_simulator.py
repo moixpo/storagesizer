@@ -60,7 +60,7 @@ with st.sidebar:
     st.markdown("---")
     st.write("**Choose a dataset  🏠** ")
 
-    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv"]
+    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv", "School1.csv"]
     dataset_choice = st.selectbox("Choose one option:", options)
 
     st.write("your data set :", dataset_choice, " is measured on:")
@@ -77,6 +77,8 @@ with st.sidebar:
         st.write("House of 2010, gaz heating, EV without charge synch with solar")
     elif dataset_choice == "Building1.csv":
         st.write("Building 1990 with one residential flat and a service entreprise in one floor")            
+    elif dataset_choice == "School1.csv":
+        st.write("Large school with a PV roof")            
 
 
 
@@ -105,7 +107,7 @@ with st.sidebar:
     opt_to_use_peak_price = st.checkbox("Use a price for the peak power?")
 
     if opt_to_use_peak_price:
-        peak_price_usr_input = st.slider("Price for the peak power (CHF/kW/an): ", min_value=5.0, max_value=20.0, value=9.6, step=0.1) 
+        peak_price_usr_input = 12.0 * st.slider("Price for the peak power (CHF/kW max year/month): ", min_value=1.0, max_value=20.0, value=9.6, step=0.1) 
         st.markdown(  "<span style='color:red; font-size:18pt'><b> WARNING, this price and peak shaving are not used in the final result with a real batt simulation yet </b></span>",  unsafe_allow_html=True)
     else :
         peak_price_usr_input = 0.0
@@ -332,8 +334,8 @@ solar_system.soc_init = soc_init_user_input # in %
 solar_system.soc_for_backup_user = batt_soc_for_backup_user_input
 solar_system.max_power_charge = battery_charge_power_kw #to update the max charge used by default independently of the battery size
 solar_system.max_power_discharge = -battery_charge_power_kw #same rate applied
-solar_system.max_inverter_power = 150 #kW  a high value in order not to have caping   # 15kW  for the next3
-solar_system.max_grid_injection_power = 150 #kW  a high value in order not to have caping 
+solar_system.max_inverter_power = 500 #kW  a high value in order not to have caping   # 15kW  for the next3
+solar_system.max_grid_injection_power = 500 #kW  a high value in order not to have caping 
 solar_system.selfpowerconsumption = INVERTER_STANDBY_W / 1000
 
 
