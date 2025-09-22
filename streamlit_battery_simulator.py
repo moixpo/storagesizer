@@ -118,14 +118,14 @@ with st.sidebar:
     st.write("An linear regression is taken between the price for an 5kWh and 50kWh")
 
     batt_five_kWh_price_user_input = st.slider("Battery cost per kWh for 5 kWh (CHF): ", min_value=100.0, max_value=800.0, value=600.0, step=50.0, help="Variable price per kWh for a small battery")
-    batt_fifty_kWh_price_user_input = st.slider("Battery cost per kWh for 50 kWh (CHF): ", min_value=100.0, max_value=800.0, value=400.0, step=50.0, help="Variable price per kWh for a large battery")
-    batt_installation_price_user_input = st.slider("Battery fixed Installation cost (CHF): ", min_value=0.0, max_value=2000.0, value=1000.0, step=100.0, help="That is for the electrician and the controller")
+    batt_fifty_kWh_price_user_input = st.slider("Battery cost per kWh for 50 kWh (CHF): ", min_value=100.0, max_value=800.0, value=350.0, step=50.0, help="Variable price per kWh for a large battery")
+    batt_installation_price_user_input = st.slider("Battery fixed installation cost (CHF): ", min_value=0.0, max_value=5000.0, value=1000.0, step=100.0, help="That is for the electrician and the controller, you could also use this for other fixed components")
     price_slope = (batt_fifty_kWh_price_user_input-batt_five_kWh_price_user_input) / 45.0
     zero_crossing_value = batt_five_kWh_price_user_input - price_slope * 5.0
 
     kWh_cost = zero_crossing_value + battery_size_kwh_usr_input * price_slope
     batt_total_cost = batt_installation_price_user_input + battery_size_kwh_usr_input * kWh_cost
-    st.write(f"The {battery_size_kwh_usr_input :.0f} kWh battery is estimated at {kWh_cost :.0f} CHF/kWh and total cost {batt_total_cost:.0f} CHF")
+    st.write(f"The {battery_size_kwh_usr_input :.0f} kWh battery is estimated at {kWh_cost :.0f} CHF/kWh and total system cost {batt_total_cost:.0f} CHF")
 
 
     st.markdown("---")
