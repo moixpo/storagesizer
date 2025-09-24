@@ -986,17 +986,17 @@ if opt_to_display_peak:
     col3.metric("Peak Bill", f"{clipping_level * peak_price_usr_input :.1f} CHF" , f"{peak_shaving_user_input - 100.0 :.0f} % reduction")
 
 
-    #############   
-    test_array = solar_system.peak_shaving_profile
-    df_pow_profile["test"] = test_array 
+    # #############   
+    # test_array = solar_system.peak_shaving_profile
+    # df_pow_profile["test"] = test_array 
 
-    fig_test = px.line(df_pow_profile, x=df_pow_profile.index, 
-                            y=["Consumption [kW]", "Clipping level", "test"], 
-                            title="TEST", 
-                            labels={"value": "Power (kW)", "variable": "Legend"},
-                            color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
-    st.plotly_chart(fig_test)
-    #################
+    # fig_test = px.line(df_pow_profile, x=df_pow_profile.index, 
+    #                         y=["Consumption [kW]", "Clipping level", "test"], 
+    #                         title="TEST", 
+    #                         labels={"value": "Power (kW)", "variable": "Legend"},
+    #                         color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
+    # st.plotly_chart(fig_test)
+    # #################
 
 
 
