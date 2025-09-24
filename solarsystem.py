@@ -34,7 +34,10 @@ class SolarSystem:
     batt_capacity_kWh = 10.0        # in kWh, 10kWh default value, to be updated if necessary
     soc_init = 20.0                 # by default, used at begining of simulation, that should be updated with the real value
     soc_for_backup_user = 20.0      # minimal level in battery when grid connected
+    soc_for_peak_shaving_user = soc_for_backup_user      # minimal level in battery when grid connected with reserved kept for peak shaving. TODO
+
     current_adaptive_soc_for_backup = soc_for_backup_user #that is the level that increases if the battery was not full in the last days
+
     soc_for_gf_user = 100.0
     soc_for_end_of_charge = 100.0
     max_power_charge = batt_capacity_kWh/2      #here it is C/2 (for lithium) for rough estimation, that should be readed on the device
@@ -51,12 +54,17 @@ class SolarSystem:
     #the battery and inverter system itself has a consumption of 50W / 0.05kW
     selfpowerconsumption = 0.05
 
+
+    #the grid
+    peak_shaving_limit = max_inverter_power #in kW the maximum power taken from the grid, above is compensated if there is energy in the battery. TODO
+    peak_shaving_activated = True
+
     #properties in operation:
     state = ""
     on_state = False
     error_log = ""
     live_values = []
-    #...an so on...
+    #...an so on... to make a digital twin of an battery and it's inverter.
 
 
 
@@ -67,7 +75,7 @@ class SolarSystem:
     # the data for simulation (solar and consumption) will be provided
     # with historical data from a csv, or directly given with dedicated methods
 
-    # very simple model of efficiency for the moment: an constant, only on battery charged-discharged TODO: better model
+    # very simple model of efficiency for the moment: an constant, only on battery charged-discharged TODO: better model in function of the power
     EFFICIENCY_BATT_ONE_WAY = 0.95 # total for 2 ways: 0.95*0.95=0.9025
 
     #properties for simulation: use of numpy arrays
@@ -103,9 +111,10 @@ class SolarSystem:
 
     #result of simulation: kept in a property of the object for later display, initialized at 0
     net_power_balance_profile = np.zeros(len(time_steps))  # solar-load
-    net_grid_balance_profile = np.zeros(len(time_steps))   # load-solar-battpow with max injection power
     net_grid_balance_unlimited_profile = np.zeros(len(time_steps))   # load-solar-battpow 
+    net_grid_balance_profile = np.zeros(len(time_steps))   # load-solar-battpow with max injection power
 
+    peak_shaving_profile = np.zeros(len(time_steps))  # power to compensate for peak shaving
 
 
 
@@ -199,6 +208,9 @@ class SolarSystem:
             #battery simulation: profiles initialisation of all the profiles with the same length of array for simulation
             self.net_grid_balance_profile = self.load_power_profile-self.solar_power_profile
             self.net_power_balance_profile = self.load_power_profile - self.solar_power_profile
+            self.peak_shaving_profile = self.net_power_balance_profile - self.peak_shaving_limit 
+            self.peak_shaving_profile[self.peak_shaving_profile < 0] = 0 # keep only the peaks over the limit
+
             self.energy_in_batt_profile = np.ones(len(self.load_power_profile))*self.soc_init/100.0*self.batt_capacity_kWh  #initialised for the whole day at the initial SOC
             self.soc_profile = np.ones(len(self.load_power_profile))*self.soc_init  #init by default with constant SOC over the whole day
             self.battery_max_charge_setpoint_profile = np.ones(len(self.load_power_profile))*self.max_power_charge  #max charge and discharge power, here it is C/3 (for lithium) for rough estimation, that should be readed on the device 
@@ -208,8 +220,17 @@ class SolarSystem:
             self.max_injection_power_profile = np.ones(len(self.load_power_profile))*(-self.max_grid_injection_power) #for an direct control of max injected power
             self.lostproduction = np.zeros(len(self.load_power_profile)) 
 
-            #update of the SOC for backup used if it changed, TODO: a profile that can vary
-            self.current_adaptive_soc_for_backup=self.soc_for_backup_user
+            #update of the SOC for backup used if it changed, 
+            if not self.peak_shaving_activated: 
+                self.current_adaptive_soc_for_backup = self.soc_for_backup_user
+            elif self.soc_for_backup_user > self.soc_for_peak_shaving_user :
+                self.current_adaptive_soc_for_backup = self.soc_for_backup_user
+            else :
+                self.current_adaptive_soc_for_backup = self.soc_for_peak_shaving_user
+            
+            #TODO: a profile that can vary
+            self.current_adaptive_soc_for_backup_profile = np.ones(len(self.load_power_profile))*(self.current_adaptive_soc_for_backup) #for an direct control of max injected power
+        
 
             #print(self.load_power_profile)
             print("\n Data are loaded from csv\n")
@@ -242,6 +263,11 @@ class SolarSystem:
          #battery simulation: profiles initialisation with the same lenght of array 
          self.net_grid_balance_profile = self.load_power_profile-self.solar_power_profile
          self.net_power_balance_profile = self.load_power_profile - self.solar_power_profile
+
+         self.peak_shaving_profile = self.net_power_balance_profile - self.peak_shaving_limit 
+         self.peak_shaving_profile[self.peak_shaving_profile < 0] = 0 # keep only the peaks over the limit
+
+
          self.energy_in_batt_profile = np.ones(len(self.load_power_profile))*self.soc_init/100.0*self.batt_capacity_kWh  #initialised for the whole day at the initial SOC
          self.soc_profile = np.ones(len(self.load_power_profile))*self.soc_init  #init by default with constant SOC over the whole day
          self.battery_max_charge_setpoint_profile = np.ones(len(self.load_power_profile))*self.max_power_charge  #max charge and discharge current 
@@ -250,9 +276,18 @@ class SolarSystem:
          self.delta_p_on_ac_source_profile = np.zeros(len(self.load_power_profile)) #for an direct control with power setpoint, per example to discharge the battery.
          self.max_injection_power_profile = np.ones(len(self.load_power_profile))*(-self.max_grid_injection_power) #for an direct control of max injected power
          self.lostproduction = np.zeros(len(self.load_power_profile)) 
-         #update of the SOC for backup used if it changed, TODO: a profile that can vary
-         self.current_adaptive_soc_for_backup=self.soc_for_backup_user
+
+         #update of the SOC for backup used if it changed, 
+         if not self.peak_shaving_activated: 
+            self.current_adaptive_soc_for_backup = self.soc_for_backup_user
+         elif self.soc_for_backup_user > self.soc_for_peak_shaving_user :
+            self.current_adaptive_soc_for_backup = self.soc_for_backup_user
+         else :
+            self.current_adaptive_soc_for_backup = self.soc_for_peak_shaving_user
         
+         #TODO: a profile that can vary
+         self.current_adaptive_soc_for_backup_profile = np.ones(len(self.load_power_profile))*(self.current_adaptive_soc_for_backup) #for an direct control of max injected power
+    
          #print(self.load_power_profile)
          print("\n Data are updated, ready for simulation \n")
 
@@ -367,7 +402,7 @@ class SolarSystem:
              k = k + 1
      
          
-         #in some cases the external control wants to add/inject some power from the battery and not have a zero balaance: 
+         #in some cases the external control wants to add/inject some power from the battery and not have a zero balance: 
          net_power_balance_with_ac_setpoint_pos = np.zeros(len(self.net_power_balance_profile))
          net_power_balance_with_ac_setpoint_neg = np.zeros(len(self.net_power_balance_profile))
 
@@ -400,6 +435,20 @@ class SolarSystem:
          #above a given level, the batt is stopped to charge:
          max_energy_in_batt = self.batt_capacity_kWh*min(self.soc_for_gf_user,self.soc_for_end_of_charge )/100.0
          #under a given level, the batt is forced to stop to discharge:
+         #but this level depends if this is for peak shaving or if this is for self consumption optimization:
+         #for peak shaving it is allowed to go under the peak shaving limit, else we stop there
+
+            ##########
+            #TODO !! 
+            # # TODO: a profile that can vary
+            #  if peak_shaving case:
+            #      self.current_adaptive_soc_for_backup=self.soc_for_backup_user 
+            #  else :
+            #     self.current_adaptive_soc_for_backup=self.soc_for_peak_shaving_user
+            #and check that the recharge from the grid never exceed the grid limits.
+            ###########
+        
+
          min_energy_in_batt = self.batt_capacity_kWh*self.current_adaptive_soc_for_backup/100.0
         
 
@@ -415,7 +464,7 @@ class SolarSystem:
              #convention for charging  is positive power, the smallest positive is the limitation:          
              possible_p_charge = min((max_energy_in_batt-self.energy_in_batt_profile[k])/self.EFFICIENCY_BATT_ONE_WAY/self.sim_step,
                                        -net_power_balance_with_ac_setpoint_neg[k],
-                                       self.battery_max_charge_setpoint_profile[k])
+                                       self.battery_max_charge_setpoint_profile[k]) #TODO: include the grid peak power limit
                  
            
              #convention for discharge power is negative power, max is the minimal discharge:
@@ -625,6 +674,63 @@ class SolarSystem:
             
 
          return fig_debug
+
+
+
+    def display_peak_shaving_simulation(self):
+         '''       
+         Returns
+         -------
+         a matplotlib fig of the simulation result
+         '''
+         #for tests...
+        
+         fig_pow, (axes_sys_pow, axes_batt_SOC) = plt.subplots(nrows=2, ncols=1, figsize=(10, 7))
+         axes_batt_pow=axes_batt_SOC.twinx() #second axe for the state of charge scale
+
+         axes_sys_pow.fill_between(self.time_steps  , self.solar_power_profile, color='y')
+         axes_sys_pow.plot(self.time_steps  , self.load_power_profile, 'r-')
+         axes_sys_pow.plot(self.time_steps  , self.net_grid_balance_profile, 'b-')
+         axes_sys_pow.plot(self.time_steps  , self.delta_p_on_ac_source_profile, 'k:')
+         axes_sys_pow.plot(self.time_steps  , self.peak_shaving_profile, 'm:')
+         
+         #axes_sys_pow.plot(self.time_steps  , self.net_power_balance_profile_with_ac_setpoint, 'c:')
+         axes_sys_pow.plot(self.time_steps  , self.net_power_balance_profile_unlimited_profile, 'b:')
+         axes_sys_pow.plot(self.time_steps  , self.lostproduction, 'c')
+
+         
+         axes_sys_pow.set_ylabel('Power activ [kW]', fontsize=12)
+         axes_sys_pow.set_title('DEBUG for peak shaving', fontsize=12, weight="bold")
+         axes_sys_pow.legend(["Solar","Loads","Grid", "$\\Delta$ P", "Peak shaving", "unlim bal","lost sol"])
+         axes_sys_pow.grid(True)
+
+         #put the fill_between first so that it is at the back
+         axes_batt_SOC.fill_between(self.time_steps  , self.soc_profile, color='c')
+         axes_batt_SOC.plot(self.time_steps  , self.current_adaptive_soc_for_backup_profile, color='r')
+
+         axes_batt_SOC.set_ylabel('SOC [%]', fontsize=12)
+         axes_batt_SOC.legend(["SOC", "adaptative"], loc='upper left')
+
+         #Then the battery power:
+         axes_batt_pow.plot(self.time_steps  , self.net_power_balance_profile, 'm-')
+         axes_batt_pow.plot(self.time_steps  , self.clamped_batt_pow_profile, 'k-')
+         #axes_batt_pow.plot(xtime, self.solar_power_profile, 'k-')
+         axes_batt_pow.set_ylabel('Power activ [kW]', fontsize=12)
+
+         axes_batt_pow.plot(self.time_steps  , self.battery_max_charge_setpoint_profile,
+                              color='g',
+                              linestyle=':')
+        
+         axes_batt_pow.plot(self.time_steps  , self.battery_max_discharge_setpoint_profile ,
+                              color='b',
+                              linestyle=':')
+        
+
+         #axes_batt_pow.set_title('System Powers', fontsize=12, weight="bold")
+         axes_batt_pow.legend(["Balance","Battery", "max ch", "min dis"], loc='upper right')
+         axes_batt_pow.grid(True)
+
+         return fig_pow
 
 
 

@@ -105,14 +105,6 @@ with st.sidebar:
     #flat sell price is for both
     fixed_price_sell_usr_input = st.slider("Sell PV price (ct/kWh): ", min_value=5.0, max_value=40.0, value=11.2, step=0.1) / 100  # directly in CHF/kWh
 
-    opt_to_use_peak_price = st.checkbox("Use a price for the peak power?")
-
-    if opt_to_use_peak_price:
-        peak_price_usr_input = 12.0 * st.slider("Price for the peak power (CHF/kW max year/month): ", min_value=1.0, max_value=20.0, value=9.6, step=0.1) 
-        st.markdown(  "<span style='color:red; font-size:18pt'><b> WARNING, this price and peak shaving are not used in the final result with a real batt simulation yet </b></span>",  unsafe_allow_html=True)
-    else :
-        peak_price_usr_input = 0.0
-
 
 
 
@@ -135,6 +127,21 @@ with st.sidebar:
     st.write("🌃 🪫 **Backup settings** ")
     batt_soc_for_backup_user_input = st.slider("Battery SOC reserved for backup (%): ", min_value=10.0, max_value=100.0, value=20.0, step=1.0, help="Battery will not discharge below this SOC.")
     st.write(f"The battery stops to discharge at this level, note that real battery don't go under {SOC_FOR_END_OF_DISCHARGE}%")
+
+
+    st.markdown("---")
+    st.write("⚡🗻 **Peak shaving settings** ")
+    batt_soc_for_peak_user_input = st.slider("Battery SOC level reserved for peak shaving (%): ", min_value=10.0, max_value=100.0, value=20.0, step=1.0, help="Battery will not discharge below this SOC except for peak shaving.")
+    st.write(f"The battery stops to discharge at this level for self-consumption optimization and can go lower to SOC for backup for peak shaving")
+
+    opt_to_use_peak_shaving= st.checkbox("Use the peak power shaving and a price?")
+
+    if opt_to_use_peak_shaving:
+        peak_price_usr_input = 12.0 * st.slider("Price for the peak power (CHF/kW max year/month): ", min_value=1.0, max_value=20.0, value=3.0, step=0.1) 
+        st.markdown(  "<span style='color:red; font-size:18pt'><b> WARNING, this price and peak shaving are not used in the final result with a real batt simulation yet </b></span>",  unsafe_allow_html=True)
+    else :
+        peak_price_usr_input = 0.0
+
 
     st.markdown("---")
     st.write("**👷 More Advanced settings** ")
@@ -316,6 +323,7 @@ sellings_solar_only_chf = df_pow_profile["SellSolarOnly"].sum()
 
 bill_with_solar_only = cost_buying_solar_only_chf -  sellings_solar_only_chf
 
+
 #*********************
 # Perform the battery simulation
 #*********************
@@ -333,6 +341,11 @@ solar_system = SolarSystem("M-P-O","Rue du Solaire 6, 2050 Transition" )
 solar_system.batt_capacity_kWh = battery_size_kwh_usr_input #10*1 # in kWh
 solar_system.soc_init = soc_init_user_input # in %
 solar_system.soc_for_backup_user = batt_soc_for_backup_user_input
+solar_system.soc_for_peak_shaving_user = batt_soc_for_peak_user_input
+solar_system.peak_shaving_activated = opt_to_use_peak_shaving
+
+#For TEST, warning, TODO
+solar_system.peak_shaving_limit = 100.0 #kW
 solar_system.max_power_charge = battery_charge_power_kw #to update the max charge used by default independently of the battery size
 solar_system.max_power_discharge = -battery_charge_power_kw #same rate applied
 solar_system.max_inverter_power = 500 #kW  a high value in order not to have caping   # 15kW  for the next3
@@ -546,6 +559,7 @@ st.session_state.simulation_results_history.append({
     "Price of peak power (CHF/kW/year)" : peak_price_usr_input,
     "Battery C rate (-)": batt_charge_power_rate_user_input,
     "Battery SOC for backup (%)" : batt_soc_for_backup_user_input, 
+    "Battery SOC for peak shaving (%)" : batt_soc_for_peak_user_input,
     "Dataset choice": dataset_choice,
     "Self-consumption ratio with storage (%)": sim_self_consumption_ratio,
     "Autarky ratio with storage (%)": sim_autarky_ratio, 
@@ -616,11 +630,11 @@ if st.session_state.simulation_results_history:
     with cols[0]:
         #st.metric("Valeur actuelle (kWh)", f"{battery_size_kwh_usr_input:.1f}")
         st.write("Swipe one settings at a time and choose what you want to display accordingly to perform sensitivity analysis. Advice: reset when you want to explore another input.")
-        list_of_channels_x = list(df_results.columns)[0:8]
-        list_of_channels_y = list(df_results.columns)[8:-1]    
+        list_of_channels_x = list(df_results.columns)[0:10]
+        list_of_channels_y = list(df_results.columns)[10:-1]    
     
         dataresults_x_axis = st.selectbox("Choose X axis:", list_of_channels_x, index=0)
-        dataresults_y_axis = st.selectbox("Choose Y axis:", list_of_channels_y, index=6)
+        dataresults_y_axis = st.selectbox("Choose Y axis:", list_of_channels_y, index=5)
 
         if st.button("🔁 Reset (empty tracking)"):
             st.session_state.simulation_results_history = []
@@ -970,6 +984,19 @@ if opt_to_display_peak:
     col1.metric("Peak ", f" {clipping_level :.1f} kW ", f"{peak_shaving_user_input - 100.0 :.0f} % reduction")
     col2.metric("Energy of all peaks shaved", str(int(clipped_peaks_kWh))+" kWh", f"{-peak_e_ratio*100 :.1f}"+"% of total energy", delta_color="off")
     col3.metric("Peak Bill", f"{clipping_level * peak_price_usr_input :.1f} CHF" , f"{peak_shaving_user_input - 100.0 :.0f} % reduction")
+
+
+    #############   
+    test_array = solar_system.peak_shaving_profile
+    df_pow_profile["test"] = test_array 
+
+    fig_test = px.line(df_pow_profile, x=df_pow_profile.index, 
+                            y=["Consumption [kW]", "Clipping level", "test"], 
+                            title="TEST", 
+                            labels={"value": "Power (kW)", "variable": "Legend"},
+                            color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
+    st.plotly_chart(fig_test)
+    #################
 
 
 
