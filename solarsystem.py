@@ -76,7 +76,7 @@ class SolarSystem:
     # with historical data from a csv, or directly given with dedicated methods
 
     # very simple model of efficiency for the moment: an constant, only on battery charged-discharged TODO: better model in function of the power
-    EFFICIENCY_BATT_ONE_WAY = 0.95  # total for 2 ways: 0.95*0.95=0.9025
+    efficiency_batt_one_way = 0.95  # total for 2 ways: 0.95*0.95=0.9025
                                     # total for 2 ways: 0.92*0.92=0.846
 
     #properties for simulation: use of numpy arrays
@@ -469,7 +469,7 @@ class SolarSystem:
              # available_power_for_peak_recovery_profile
              #self.available_power_for_peak_recovery_profile[k] = 
              # self.peak_shaving_profile[k] > 0
-             ch_power_limited_by_e_for_peak_recovery = (min_energy_in_batt_for_selfconsumption-self.energy_in_batt_profile[k])/self.EFFICIENCY_BATT_ONE_WAY/self.sim_step
+             ch_power_limited_by_e_for_peak_recovery = (min_energy_in_batt_for_selfconsumption-self.energy_in_batt_profile[k])/self.efficiency_batt_one_way/self.sim_step
              if ch_power_limited_by_e_for_peak_recovery < 0: 
                 ch_power_limited_by_e_for_peak_recovery = 0
 
@@ -477,7 +477,7 @@ class SolarSystem:
                                                       ch_power_limited_by_e_for_peak_recovery)
 
              #convention for charging  is positive power, the smallest positive is the limitation:          
-             possible_p_charge_for_selfconsumption = min((max_energy_in_batt-self.energy_in_batt_profile[k])/self.EFFICIENCY_BATT_ONE_WAY/self.sim_step,
+             possible_p_charge_for_selfconsumption = min((max_energy_in_batt-self.energy_in_batt_profile[k])/self.efficiency_batt_one_way/self.sim_step,
                                        -net_power_balance_with_ac_setpoint_neg[k],
                                        self.battery_max_charge_setpoint_profile[k]) #TODO: include the grid peak power limit
                  
@@ -490,13 +490,13 @@ class SolarSystem:
              #convention for discharge power is negative power, max is the minimal discharge:
              # when discharging and injecting back to the grid, this must take into account the max injection current: self.max_injection_power_profile[k]                 
 
-             disch_power_limited_by_e_for_selfconsumption = (min_energy_in_batt_for_selfconsumption-self.energy_in_batt_profile[k])*self.EFFICIENCY_BATT_ONE_WAY/self.sim_step
-             disch_power_limited_by_e_for_peak_shaving = (min_energy_in_batt_for_peak-self.energy_in_batt_profile[k])*self.EFFICIENCY_BATT_ONE_WAY/self.sim_step
+             disch_power_limited_by_e_for_selfconsumption = (min_energy_in_batt_for_selfconsumption-self.energy_in_batt_profile[k])*self.efficiency_batt_one_way/self.sim_step
+             disch_power_limited_by_e_for_peak_shaving = (min_energy_in_batt_for_peak-self.energy_in_batt_profile[k])*self.efficiency_batt_one_way/self.sim_step
              
              possible_p_discharge_for_peak_shaving= max(-self.peak_shaving_profile[k],
                                         disch_power_limited_by_e_for_peak_shaving)
 
-             possible_p_discharge_for_selfconsumption = max((min_energy_in_batt_for_selfconsumption-self.energy_in_batt_profile[k])*self.EFFICIENCY_BATT_ONE_WAY/self.sim_step,
+             possible_p_discharge_for_selfconsumption = max((min_energy_in_batt_for_selfconsumption-self.energy_in_batt_profile[k])*self.efficiency_batt_one_way/self.sim_step,
                                      -net_power_balance_with_ac_setpoint_pos[k],
                                      self.battery_max_discharge_setpoint_profile[k],
                                      self.max_injection_power_profile[k]-net_power_balance_neg[k])
@@ -525,15 +525,15 @@ class SolarSystem:
                  # now compute the power balance:
                  if self.clamped_batt_pow_profile[k] > 0.0:
                      #here battery charge efficiency
-                     self.energy_in_batt_profile[k+1] = self.energy_in_batt_profile[k] + self.clamped_batt_pow_profile[k] * self.sim_step * self.EFFICIENCY_BATT_ONE_WAY
+                     self.energy_in_batt_profile[k+1] = self.energy_in_batt_profile[k] + self.clamped_batt_pow_profile[k] * self.sim_step * self.efficiency_batt_one_way
                  else:
                      #here battery discharge efficiency
-                     self.energy_in_batt_profile[k+1] = self.energy_in_batt_profile[k] + self.clamped_batt_pow_profile[k] * self.sim_step / self.EFFICIENCY_BATT_ONE_WAY
+                     self.energy_in_batt_profile[k+1] = self.energy_in_batt_profile[k] + self.clamped_batt_pow_profile[k] * self.sim_step / self.efficiency_batt_one_way
                 
              
                 
              #the grid power is the netpower plus what's going to the battery:
-             self.net_grid_balance_profile[k] = self.net_power_balance_profile[k] + self.clamped_batt_pow_profile[k] #* self.EFFICIENCY_BATT_ONE_WAY
+             self.net_grid_balance_profile[k] = self.net_power_balance_profile[k] + self.clamped_batt_pow_profile[k] #* self.efficiency_batt_one_way
              
              #but this is limited by the max injection current:
              if self.net_grid_balance_profile[k] < self.max_injection_power_profile[k]:
