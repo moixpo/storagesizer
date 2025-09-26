@@ -22,7 +22,6 @@ from advanced_figures import *
 #constants
 INVERTER_STANDBY_W = 50  #Watts
 SOC_FOR_END_OF_DISCHARGE = 5.0  #for islanding case
-
 EFFICIENCY_BATT_ONE_WAY = 0.95  #TODO make variable, transmit to the battery simulation
 
 
@@ -131,16 +130,22 @@ with st.sidebar:
 
     st.markdown("---")
     st.write("⚡🗻 **Peak shaving settings** ")
-    batt_soc_for_peak_user_input = st.slider("Battery SOC level reserved for peak shaving (%): ", min_value=10.0, max_value=100.0, value=20.0, step=1.0, help="Battery will not discharge below this SOC except for peak shaving.")
-    st.write(f"The battery stops to discharge at this level for self-consumption optimization and can go lower to SOC for backup for peak shaving")
 
     opt_to_use_peak_shaving= st.checkbox("Use the peak power shaving and a price?")
 
     if opt_to_use_peak_shaving:
-        peak_price_usr_input = 12.0 * st.slider("Price for the peak power (CHF/kW max year/month): ", min_value=1.0, max_value=20.0, value=3.0, step=0.1) 
-        st.markdown(  "<span style='color:red; font-size:18pt'><b> WARNING, this price and peak shaving are not used in the final result with a real batt simulation yet </b></span>",  unsafe_allow_html=True)
+                
+        peak_shaving_user_input = st.slider("🪓 Peak consumption shaving to (% of max load): ", min_value=0.0, max_value=100.0, value=70.0, step=1.0)
+        batt_soc_for_peak_user_input = st.slider("Battery SOC level reserved for peak shaving (%): ", min_value=10.0, max_value=100.0, value=20.0, step=1.0, help="Battery will not discharge below this SOC except for peak shaving.")
+        st.write(f"The battery stops to discharge at this level for self-consumption optimization and can go lower to SOC for backup for peak shaving")
+
+        peak_price_usr_input = 12.0 * st.slider("Price for the peak power (CHF/kW max year/month): ", min_value=0.0, max_value=20.0, value=0.0, step=0.1) #TODO: adapt to the size of the dataset, here is the hypothesis of 12 months
+
+        #st.markdown(  "<span style='color:red; font-size:18pt'><b> WARNING, this price is not used in the final result with a real batt simulation yet </b></span>",  unsafe_allow_html=True)
     else :
         peak_price_usr_input = 0.0
+        peak_shaving_user_input = 100.0
+        batt_soc_for_peak_user_input = 20.0
 
 
     st.markdown("---")
@@ -171,7 +176,7 @@ with st.sidebar:
 
 
     st.markdown("---")
-    st.write("Battery sizer, version 0.2")
+    st.write("Battery sizer, version 0.4")
     st.write("✌️ Moix P-O, 2025")
     st.write("Streamlit for interactive dashboards...")
     
@@ -199,6 +204,8 @@ if len(st.session_state.simulation_results_history)==0:
     
     Various interactive plots of the power fluxes are given to vizualize what happens exactly in the house. 
     
+    It is possible to activate a peak shaving function and asses if the storage is able to make it. It is also possible to study the backup time available.
+             
         """)
         
 
@@ -263,8 +270,10 @@ reference_grid_consumption_kWh = df_pow_profile["grid consumption reference"].su
 reference_self_consumption_ratio = (scaled_production_kWh-reference_grid_injection_kWh) / scaled_production_kWh * 100
 reference_autarky_ratio = (consumption_kWh-reference_grid_consumption_kWh) / consumption_kWh * 100.0  
 
-
-
+#*********************
+# Computations for the peak power
+peak_power_of_consumption = df_pow_profile["Consumption [kW]"].max()
+clipping_level = peak_shaving_user_input*peak_power_of_consumption/100.0
 
 
 
@@ -321,7 +330,7 @@ df_pow_profile["SellSolarOnly"] = -(df_pow_profile["grid injection reference"] *
 sellings_solar_only_chf = df_pow_profile["SellSolarOnly"].sum()
 #print("Sold PV electricity with with solar only, no storage:", sellings_solar_only_chf)
 
-bill_with_solar_only = cost_buying_solar_only_chf -  sellings_solar_only_chf
+
 
 
 #*********************
@@ -345,13 +354,14 @@ solar_system.soc_for_peak_shaving_user = batt_soc_for_peak_user_input
 solar_system.peak_shaving_activated = opt_to_use_peak_shaving
 
 #For TEST, warning, TODO
-solar_system.peak_shaving_limit = 100.0 #kW
+solar_system.peak_shaving_limit = clipping_level #kW
+
 solar_system.max_power_charge = battery_charge_power_kw #to update the max charge used by default independently of the battery size
 solar_system.max_power_discharge = -battery_charge_power_kw #same rate applied
 solar_system.max_inverter_power = 500 #kW  a high value in order not to have caping   # 15kW  for the next3
 solar_system.max_grid_injection_power = 500 #kW  a high value in order not to have caping 
 solar_system.selfpowerconsumption = INVERTER_STANDBY_W / 1000
-
+solar_system.efficiency_batt_one_way = EFFICIENCY_BATT_ONE_WAY
 
 
 
@@ -408,11 +418,6 @@ sellings_solar_storage_chf = df_pow_profile["SellSolarWithStorage"].sum()
 #print("Sold PV electricity with with solar only, no storage:", sellings_solar_storage_chf)
 injection_kWh_with_storage = -df_pow_profile["Grid injection with storage"].sum()/4.0
 
-bill_with_storage = cost_buying_solar_storage_chf -sellings_solar_storage_chf 
-
-gain_of_storage = bill_with_solar_only - bill_with_storage
-total_gain_of_solar_and_storage= cost_buying_no_solar_chf - bill_with_storage
-
 #bilan batterie  
 delta_e_batt=(soc_array[-1]-soc_array[0])/100.0*battery_size_kwh_usr_input  #last SOC - first SOC of the simulation
 #valorisé au prix moyen de la journée:
@@ -425,7 +430,7 @@ storage_value = delta_e_batt * mean_price_with_storage # np.mean(cost_normal_pro
 #*********************
 # Computations for the peak power
 
-peak_power_of_consumption = df_pow_profile["Consumption [kW]"].max()
+
 peak_power_of_production = df_pow_profile["Solar power scaled"].max()
 
 peak_grid_consumption_with_solar = df_pow_profile["grid consumption reference"].max()
@@ -433,6 +438,24 @@ peak_grid_injection_with_solar = df_pow_profile["grid injection reference"].min(
 
 peak_grid_consumption_with_batteries = df_pow_profile["Grid consumption with storage"].max()
 peak_grid_injection_with_batteries = df_pow_profile["Grid injection with storage"].min()
+
+
+
+
+#*********************
+# Computations of the bills
+bill_of_peak_without_nothing = peak_power_of_consumption * peak_price_usr_input
+bill_of_peak_solar_only = peak_grid_consumption_with_solar * peak_price_usr_input
+bill_of_peak_with_storage = peak_grid_consumption_with_batteries*peak_price_usr_input
+
+bill_without_nothing = cost_buying_no_solar_chf + bill_of_peak_without_nothing
+bill_with_solar_only = cost_buying_solar_only_chf -  sellings_solar_only_chf + bill_of_peak_solar_only
+bill_with_storage = cost_buying_solar_storage_chf - sellings_solar_storage_chf + bill_of_peak_with_storage
+
+
+gain_of_storage = bill_with_solar_only - bill_with_storage
+total_gain_of_solar_and_storage= bill_without_nothing - bill_with_storage
+
 
 
 #*********************
@@ -489,12 +512,11 @@ number_of_quarters[-1] = number_of_quarters[-2]
 df_pow_profile["Time of backup on battery"] = number_of_quarters / 4.0
 #TODO  : correctif sur les dernières heures de l'année qui ont un time to go qui tombe à 0 à cause de la fin des données.
 
+minimal_backup_time = df_pow_profile["Time of backup on battery"].min()
 
 
 #*********************
 # Get the results
-
-#TODO
 
 sim_grid_injection_kWh = injection_kWh_with_storage
 sim_grid_consumption = consumption_kWh_with_storage
@@ -556,9 +578,10 @@ st.session_state.simulation_results_history.append({
     "Buy Electricity price (CHF/kWh)": fixed_price_buy_usr_input,
     "Sell PV price (CHF/kWh)": fixed_price_sell_usr_input,
     "Price type selection": price_type_usr_input, 
-    "Price of peak power (CHF/kW/year)" : peak_price_usr_input,
+    "Price peak power (CHF/kW max year/year)": peak_price_usr_input,
     "Battery C rate (-)": batt_charge_power_rate_user_input,
     "Battery SOC for backup (%)" : batt_soc_for_backup_user_input, 
+    "Level of peak shaving (%)" : peak_shaving_user_input, 
     "Battery SOC for peak shaving (%)" : batt_soc_for_peak_user_input,
     "Dataset choice": dataset_choice,
     "Self-consumption ratio with storage (%)": sim_self_consumption_ratio,
@@ -573,6 +596,7 @@ st.session_state.simulation_results_history.append({
     "Battery total price (CHF)": batt_total_cost,
     "Battery variable price (CHF/kWh)": kWh_cost,
     "Cost of storage over 15 years (ct/kWh)": cost_of_stored_kWh_over_15_years*100.0,
+    "Peak grid consumption with batt (kW)": peak_grid_consumption_with_batteries,
     "Reference grid injection (kWh)": reference_grid_injection_kWh,
     "Reference grid consumption (kWh)": reference_grid_consumption_kWh,
     "Reference self-consumption (%)":reference_self_consumption_ratio, 
@@ -599,20 +623,20 @@ col1.metric("Consumption", str(int(consumption_kWh))+" kWh")
 col2.metric("Production", str(int(scaled_production_kWh))+" kWh")
 
 col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Grid-feeding", str(int(reference_grid_injection_kWh)) + " kWh")
-col2.metric("Grid consumption", str(int(reference_grid_consumption_kWh)) + " kWh")
+col1.metric("Grid consumption", str(int(reference_grid_consumption_kWh)) + " kWh")
+col2.metric("Grid-feeding", str(int(reference_grid_injection_kWh)) + " kWh")
 col3.metric("Self-consumption", f"{reference_self_consumption_ratio :.1f}" + "%")
 col4.metric("Autarky", f"{reference_autarky_ratio :.1f}" + "%")
-col5.metric("Bill", f"{bill_with_solar_only :.1f}" + "CHF")
+col5.metric("Bill", f"{bill_with_solar_only :.0f}" + "CHF")
 
 st.write("📋 **Results of simulation with solar and storage 🔋** ")
 col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Grid-feeding", str(int(sim_grid_injection_kWh))+" kWh", f"{(sim_grid_injection_kWh-reference_grid_injection_kWh)/reference_grid_injection_kWh*100 :.1f}" + "%")
-col2.metric("Grid consumption", str(int(sim_grid_consumption))+" kWh", f"{(sim_grid_consumption-reference_grid_consumption_kWh)/reference_grid_consumption_kWh*100 :.1f}" + "%")
+col1.metric("Grid consumption", str(int(sim_grid_consumption))+" kWh", f"{(sim_grid_consumption-reference_grid_consumption_kWh)/reference_grid_consumption_kWh*100 :.1f}" + "%", delta_color="off")
+col2.metric("Grid-feeding", str(int(sim_grid_injection_kWh))+" kWh", f"{(sim_grid_injection_kWh-reference_grid_injection_kWh)/reference_grid_injection_kWh*100 :.1f}" + "%", delta_color="off")
 col3.metric("Self-consumption", f"{sim_self_consumption_ratio :.1f}"+"%", f"{(sim_self_consumption_ratio-reference_self_consumption_ratio) :.1f}" + "%" )
 #col3.metric("Self-consumption", f"{(sim_self_consumption_ratio) :.1f, }"+"%", f"{(sim_self_consumption_ratio-reference_self_consumption_ratio) :.1f}"+"%")
 col4.metric("Autarky", f"{(sim_autarky_ratio) :.1f}" + "%", f"{(sim_autarky_ratio-reference_autarky_ratio) :.1f}"+"%")
-col5.metric("Bill", f" {sim_bill :.1f}"+"CHF", f" { sim_bill-bill_with_solar_only :.1f}"+"CHF" )
+col5.metric("Bill", f" {sim_bill :.0f}"+"CHF", f" { sim_bill-bill_with_solar_only :.0f}"+"CHF", delta_color="off" )
 
     
 
@@ -630,8 +654,8 @@ if st.session_state.simulation_results_history:
     with cols[0]:
         #st.metric("Valeur actuelle (kWh)", f"{battery_size_kwh_usr_input:.1f}")
         st.write("Swipe one settings at a time and choose what you want to display accordingly to perform sensitivity analysis. Advice: reset when you want to explore another input.")
-        list_of_channels_x = list(df_results.columns)[0:10]
-        list_of_channels_y = list(df_results.columns)[10:-1]    
+        list_of_channels_x = list(df_results.columns)[0:11]
+        list_of_channels_y = list(df_results.columns)[11:-1]    
     
         dataresults_x_axis = st.selectbox("Choose X axis:", list_of_channels_x, index=0)
         dataresults_y_axis = st.selectbox("Choose Y axis:", list_of_channels_y, index=5)
@@ -682,7 +706,7 @@ else:
 
 #st.subheader(" The battery simulation")
 st.write("In this simulation the battery control is done like what most of the inverters do: charge as soon as there is solar excess and discharge as soon as there is not enough solar. " \
-        "This is not very intelligent and doesn't optimize special cases like peak shaving, dynamic prices, ...")
+        "This is not very intelligent and doesn't optimize special cases like dynamic prices, ... yet")
     
             
 
@@ -921,45 +945,40 @@ if opt_to_display_peak:
     col1, col2, col3 = st.columns(3)
     col1.metric("Consumption peak", f"{peak_power_of_consumption :.1f}" + " kW")
     col2.metric("Production peak", f"{peak_power_of_production :.1f}" + " kW")  
-    col3.metric("Peak Bill", f"{peak_power_of_consumption * peak_price_usr_input :.1f} CHF" )
+    col3.metric("Peak bill Consump", f"{peak_power_of_consumption * peak_price_usr_input :.0f} CHF" )
 
     col1, col2, col3 = st.columns(3) 
     col1.metric("Grid-consumption peak", f"{peak_grid_consumption_with_solar :.1f}" + " kW")  
-    col2.metric("Grid Production peak", f"{peak_grid_injection_with_solar :.1f}" + " kW")   
-    col3.metric("Peak Bill", f"{peak_grid_consumption_with_solar * peak_price_usr_input :.1f} CHF" )
+    col2.metric("Grid Production peak", f"{-peak_grid_injection_with_solar :.1f}" + " kW")   
+    col3.metric("Peak bill sol", f"{bill_of_peak_solar_only :.0f} CHF" )
 
+    st.markdown("---")
+    st.subheader(" 🪓 Peak shaving: " + f"The consumption is shaved at  {clipping_level :.1f} kW ")
 
     st.write("📋 **Results of simulation with solar and storage 🔋** ")
     col1, col2, col3= st.columns(3)
     col1.metric("Grid-consumption peak", f"{peak_grid_consumption_with_batteries :.1f}" + " kW")
-    col2.metric("Grid Production peak", f"{peak_grid_injection_with_batteries :.1f}" + " kW")
-    col3.metric("Peak Bill", f"{peak_grid_consumption_with_batteries*peak_price_usr_input :.1f} CHF" )
+    col2.metric("Grid Production peak", f"{-peak_grid_injection_with_batteries :.1f}" + " kW")
+    col3.metric("Peak bill sol+sto", f"{bill_of_peak_with_storage :.0f} CHF" , 
+                                     f"{(bill_of_peak_with_storage - bill_of_peak_solar_only) :.0f} CHF ", delta_color="off" )
 
 
-
-
-    fig_hist = build_power_histogram_figure(df_pow_profile)
-    st.pyplot(fig_hist)
 
     fig_acsource_hours_heatmap = build_hours_grid_heatmap_figure(hours_mean_df)
     st.pyplot(fig_acsource_hours_heatmap)
 
-
-    st.subheader(" 🪓 Peak shaving input ")
-
-    st.write("Assessement of the energy in the peaks, cut down from the peak recorded")
+    fig_hist = build_power_histogram_figure(df_pow_profile)
+    st.pyplot(fig_hist)
 
 
-    peak_shaving_user_input = st.slider("🪓 Peak consumption shaving to (%): ", min_value=0.0, max_value=100.0, value=70.0, step=1.0)
 
-    cols = st.columns(2)
-
-   
     st.markdown("---")
+    st.subheader("Assessement of the energy in the peaks, cut down from the peak recorded")
+    st.write("This part is a pure study of the peaks, there is no simulation of the system with the battery")
 
 
     length_profile = len(df_pow_profile.index)
-    clipping_level = peak_shaving_user_input*peak_power_of_consumption/100.0
+    #clipping_level = peak_shaving_user_input*peak_power_of_consumption/100.0
     clipping_level_profile = np.ones(length_profile)* clipping_level
     df_pow_profile["Clipping level"] = clipping_level_profile
 
@@ -976,54 +995,9 @@ if opt_to_display_peak:
     clipping_losses2 = df_pow_profile["peaks over limit"].sum()/4.0/consumption_kWh
 
 
-
-    st.write(f"The consumption is shaved at  {clipping_level :.1f} kW ")
-
-
-    col1, col2, col3= st.columns(3)
-    col1.metric("Peak ", f" {clipping_level :.1f} kW ", f"{peak_shaving_user_input - 100.0 :.0f} % reduction")
-    col2.metric("Energy of all peaks shaved", str(int(clipped_peaks_kWh))+" kWh", f"{-peak_e_ratio*100 :.1f}"+"% of total energy", delta_color="off")
-    col3.metric("Peak Bill", f"{clipping_level * peak_price_usr_input :.1f} CHF" , f"{peak_shaving_user_input - 100.0 :.0f} % reduction")
-
-
-    # #############   
-    # test_array = solar_system.peak_shaving_profile
-    # df_pow_profile["test"] = test_array 
-
-    # fig_test = px.line(df_pow_profile, x=df_pow_profile.index, 
-    #                         y=["Consumption [kW]", "Clipping level", "test"], 
-    #                         title="TEST", 
-    #                         labels={"value": "Power (kW)", "variable": "Legend"},
-    #                         color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
-    # st.plotly_chart(fig_test)
-    # #################
-
-
-
-    fig_combined = px.line(df_pow_profile, x=df_pow_profile.index, 
-                            y=["Consumption [kW]", "Clipping level", "Clipped consumption"], 
-                            title="Consumption and clipping level", 
-                            labels={"value": "Power (kW)", "variable": "Legend"},
-                            color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
-    
-    # Move legend below the graph
-    fig_combined.update_layout(
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.2,  # Position below the graph
-            xanchor="center",
-            x=0.1
-        )
-    )
-    st.plotly_chart(fig_combined)
-
-
-    st.write("How much energy is in each of those peaks? That is an indication of the battery size for this task. But to really perfor this peak shaving with a battery, we must be sure that the battery can recharge between two peaks and the battery size necessary may be bigger that the peak size.")
-
-
+    #Counting of peaks and integrating their energy:
     number_of_peaks = 0
-    largest_peak_kWh = 0.0 # TODO
+    largest_peak_kWh = 0.0 
 
     integration_of_single_peaks = np.zeros(length_profile)
     integration_of_recovery = np.zeros(length_profile)
@@ -1066,10 +1040,56 @@ if opt_to_display_peak:
 
     #largest_peak_kWh = df_pow_profile["integ of peaks"].max()
 
+
+
+
+
+
+
+    #Visualization:
     col1, col2, col3= st.columns(3)
-    col1.metric("Number of peaks ", f" {number_of_peaks :.0f} peaks")
-    col2.metric("The largest is", f" {largest_peak_kWh :.1f} kWh")
-    col3.metric("Battery energy reserved needed", f" {battery_for_peak_shaving_kWh :.1f} kWh " , f"{battery_for_peak_shaving_kWh / battery_size_kwh_usr_input *100 :.0f} % of total")
+    col1.metric("Peak shaving level ", f" {clipping_level :.1f} kW ", f"{peak_shaving_user_input - 100.0 :.0f} % reduction", delta_color="off")
+    col2.metric("Number of peaks ", f" {number_of_peaks :.0f} peaks")
+    col3.metric("Peak Bill", f"{clipping_level * peak_price_usr_input :.1f} CHF" , f"{peak_shaving_user_input - 100.0 :.0f} % reduction", delta_color="off")
+
+    fig_combined = px.line(df_pow_profile, x=df_pow_profile.index, 
+                            y=["Consumption [kW]", "Clipping level", "Clipped consumption"], 
+                            title="Consumption and clipping level", 
+                            labels={"value": "Power (kW)", "variable": "Legend"},
+                            color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
+    
+    # Move legend below the graph
+    fig_combined.update_layout(
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.2,  # Position below the graph
+            xanchor="center",
+            x=0.1
+        )
+    )
+    st.plotly_chart(fig_combined)
+
+
+    # #############   
+    # test_array = solar_system.peak_shaving_profile
+    # df_pow_profile["test"] = test_array 
+
+    # fig_test = px.line(df_pow_profile, x=df_pow_profile.index, 
+    #                         y=["Consumption [kW]", "Clipping level", "test"], 
+    #                         title="TEST", 
+    #                         labels={"value": "Power (kW)", "variable": "Legend"},
+    #                         color_discrete_sequence=["lightcoral", "lightblue", "lightgreen"] )
+    # st.plotly_chart(fig_test)
+    # #################
+
+    st.write("How much energy is in each of those peaks? That is an indication of the battery size for this task. To really perfor this peak shaving with a battery, we must be sure that the battery can recharge between two peaks, that is why the battery size may be bigger that the peak size.")
+
+
+    col1, col2, col3= st.columns(3)
+    col1.metric("The largest peak is", f" {largest_peak_kWh :.1f} kWh")
+    col2.metric("Battery energy reserved needed", f" {battery_for_peak_shaving_kWh :.1f} kWh " , f"{battery_for_peak_shaving_kWh / battery_size_kwh_usr_input *100 :.0f} % of total")
+    col3.metric("Energy of all peaks shaved", str(int(clipped_peaks_kWh))+" kWh", f"{-peak_e_ratio*100 :.1f}"+"% of total energy", delta_color="off")
 
 
 
@@ -1100,12 +1120,16 @@ opt_to_display_bkup = st.checkbox("Show this part of analysis about backup if ne
 
 if opt_to_display_bkup:
 
-    st.write(""" Here the following indicator is also computed:      
-
-    - the reserve time on battery in case of blackout (how long is it possible to supply the coming consumption with the battery in islanding 🏝 🏭)
+    st.write(""" Here the reserve time on battery in case of blackout (how long is it possible to supply the coming consumption with the battery in islanding 🏝 🏭)
 
     """)
     #st.markdown("<span style='color:red ; font-size:25pt'><b> TODO: Complete this part </b></span>", unsafe_allow_html=True)
+
+
+
+    col1, col2 = st.columns(2)
+    col1.metric("Minimal time of backup on battery", f" {minimal_backup_time} hours")
+    col2.metric("Minimal time of backup on battery and Solar", "TO DO")
 
     # #Use Time  as index:
     # df_pow_profile = df_pow_profile.set_index("Time")
@@ -1192,7 +1216,7 @@ if opt_to_display_bkup:
 
 
 
-    st.write("This indicate for every moment how much time could be spend on the battery with the coming load and the SOC at that precise time. This is not the possible islanding time as the production is not taken into account, this is the next graph")
+    st.write("This indicate for every moment how much time could be spend on the battery only with the coming load and the SOC at that precise time. This is not the possible islanding time as the solar production is not taken into account, this is for an future graph. The goal here is to have an idea of the reserve independently of the enventual solar")
 
 
 

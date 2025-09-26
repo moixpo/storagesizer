@@ -27,7 +27,7 @@ def build_SOC_heatmap_figure(hours_mean_df):
 
     # Extract the values from the dataframe
     consumption_data = energies_by_hours.values
-    print(consumption_data)
+    #print(consumption_data)
 
     # Determine the shape of the reshaped array
     n_days = len(consumption_data) // (24)
@@ -93,7 +93,7 @@ def build_production_heatmap_figure(hours_mean_df):
 
     # Extract the values from the dataframe
     consumption_data = energies_by_hours.values
-    print(consumption_data)
+    #print(consumption_data)
 
     # Determine the shape of the reshaped array
     n_days = len(consumption_data) // (24)
