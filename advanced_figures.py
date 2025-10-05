@@ -371,7 +371,7 @@ def build_time_to_go_heatmap_figure(hours_mean_df):
     #hourly_data = data.resample('H').mean()  # or data.resample('H').sum()
     energies_by_hours=hours_mean_df[all_channels_labels[channel_number_SOC[0]]]
 
-    # Extract the values from the dataframe
+    # Extract the values from the dataframe to an array:
     consumption_data = energies_by_hours.values
     #print(consumption_data)
 
@@ -479,3 +479,110 @@ def build_bat_inout_figure(day_kwh_df, month_kwh_df):
 
 
 
+
+def build_power_profile(quarters_mean_df, label_of_channel):
+    #for tests:
+    #start_date = dt.date(2018, 7, 1)
+    #end_date = dt.date(2018, 8, 30) 
+    
+    # temp1 = total_datalog_df[total_datalog_df.index.date >= start_date]
+    # temp2 = temp1[temp1.index.date <= end_date]
+
+    temp2 = quarters_mean_df
+
+    all_channels_labels = list(quarters_mean_df.columns)
+    channel_number = [i for i, elem in enumerate(all_channels_labels) if label_of_channel in elem]
+   
+    #channel_number=channel_number_Pout_conso_Tot
+    time_of_day_in_hours=list(temp2.index.hour+temp2.index.minute/60)
+    time_of_day_in_minutes=list(temp2.index.hour*60+temp2.index.minute)
+    
+    #add a channels to the dataframe with minutes of the day to be able to sort data on it: 
+    #Create a new entry in the dataframe:
+    temp2['Time of day in minutes']=time_of_day_in_minutes
+        
+        
+    fig_pow_by_min_of_day, axes_pow_by_min_of_day = plt.subplots(nrows=1, ncols=1, figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT))
+    
+    
+    #maybe it is empty if there is no inverter:
+    if channel_number:
+        
+        channel_label=all_channels_labels[channel_number[0]]
+        
+        axes_pow_by_min_of_day.plot(time_of_day_in_hours,
+                          temp2[channel_label].values, 
+                          marker='+',
+                          alpha=0.25,
+                          color='b',
+                          linestyle='None')
+       
+        
+    
+        #faire la moyenne de tous les points qui sont à la même quart d'heure du jour:
+        mean_by_minute=np.zeros(24*4)
+        x1=np.array(range(0,24*4))
+        for k in x1:
+            tem_min_pow1=temp2[temp2['Time of day in minutes'].values == k*15]
+            mean_by_minute[k]=np.nanmean(tem_min_pow1[channel_label].values)
+            
+    
+        axes_pow_by_min_of_day.plot(x1/4, mean_by_minute,
+                          color='r',
+                          linestyle ='-',
+                          linewidth=2,
+                          drawstyle='steps-post')
+    
+        #faire la moyenne de tous les points qui sont à la même heure:
+        mean_by_hour=np.zeros(24)
+        x2=np.array(range(0,24))
+        for k in x2:
+            tem_min_pow2=temp2[temp2.index.hour == k]
+            mean_by_hour[k]=np.nanmean(tem_min_pow2[channel_label].values)
+            
+    
+        axes_pow_by_min_of_day.plot(x2, mean_by_hour,
+                          color='g',
+                          linestyle ='-',
+                          linewidth=2,
+                          drawstyle='steps-post')
+        
+        #mean power:
+        #axes_pow_by_min_of_day.axhline(np.nanmean(total_datalog_df[channel_label].values), color='k', linestyle='dashed', linewidth=2)
+        axes_pow_by_min_of_day.axhline(mean_by_minute.mean(), color='k', linestyle='dashed', linewidth=2)
+        text_to_disp='Mean = ' + str(round(mean_by_minute.mean(), 2)) + ' '
+        axes_pow_by_min_of_day.text(0.1,mean_by_minute.mean()+0.1,  text_to_disp, horizontalalignment='left',verticalalignment='bottom')
+        axes_pow_by_min_of_day.legend(["All points", "quarter mean profile" ,"hour mean profile"])
+        #axes_pow_by_min_of_day.set_ylabel("Power [kW]", fontsize=12)
+        axes_pow_by_min_of_day.set_xlabel("Time [h]", fontsize=12)
+        axes_pow_by_min_of_day.set_xlim(0,24)
+        axes_pow_by_min_of_day.set_title("Profile by hour of the day " + label_of_channel, fontsize=12, weight="bold")
+        axes_pow_by_min_of_day.grid(True)
+        
+    
+    else:
+        #axes_pow_by_min_of_day.text(0.0, 0.0, "There is no Studer inverter!", horizontalalignment='left',verticalalignment='bottom')
+        axes_pow_by_min_of_day.set_title("There is no data with this lable!", fontsize=12, weight="bold")
+        
+    
+    # fig_pow_by_min_of_day.figimage(im, 10, 10, zorder=3, alpha=.2)
+    # fig_pow_by_min_of_day.savefig("FigureExport/typical_power_profile_figure.png")
+
+    return fig_pow_by_min_of_day
+
+
+
+
+def build_test_figure(array):
+    #for tests:
+
+    test_figure, axes_test = plt.subplots(nrows=1, ncols=1, figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT))
+    
+    
+    #maybe it is empty if there is no inverter:            
+    axes_test.plot(array)
+    
+    axes_test.set_title("Test figure", fontsize=12, weight="bold")
+    axes_test.grid(True)
+        
+    return test_figure

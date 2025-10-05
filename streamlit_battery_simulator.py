@@ -59,9 +59,9 @@ with st.sidebar:
     st.markdown("---")
     st.write("**Choose a dataset  🏠** ")
 
-    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv", "School1.csv","Industry1.csv" ]
+    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv", "Community1.csv", "School1.csv","Industry1.csv" ]
     dataset_choice = st.selectbox("Choose one option:", options)
-
+ 
     st.write("your data set :", dataset_choice, " is measured on:")
     
     if dataset_choice == "House1.csv":
@@ -76,6 +76,8 @@ with st.sidebar:
         st.write("House of 2010, gaz heating, EV without charge synch with solar")
     elif dataset_choice == "Building1.csv":
         st.write("Building 1990 with one residential flat and a service entreprise in one floor")            
+    elif dataset_choice == "Community1.csv":
+        st.write("The consumption of Houses 1 to 5 + Building1, and solar of houses 2 and 5 that wanted to share their production in a local electricity community to value it")    
     elif dataset_choice == "School1.csv":
         st.write("Large school with a PV roof")            
     elif dataset_choice == "Industry1.csv":
@@ -158,6 +160,10 @@ with st.sidebar:
 
     st.write(" ")
     soc_init_user_input = st.slider("Battery initial SOC for simulation (%): ", min_value=20.0, max_value=100.0, value=50.0, step=1.0)
+
+    opt_to_use_smart_charging= st.checkbox("Use Smart Charging?")
+    st.write("Smart charging reduce grid peak injection, minimize the time with high batteries if possible.")
+    st.write("Smart charging is under developpement... please see at the bottom of the page.")
 
 
 
@@ -477,6 +483,7 @@ number_of_quarters = np.zeros(length_profile)
 df_pow_profile["cumsum conso"]= df_pow_profile["Consumption [kW]"].cumsum()* 0.25
 df_pow_profile["comm conso"]= consumption_kWh - df_pow_profile["cumsum conso"]
 cumsum_conso = df_pow_profile["cumsum conso"].values
+
 k=0
 for energy in energy_in_batt_array:
     #from that point, how many quarters of conso equals to energy? 
@@ -1308,10 +1315,141 @@ st.write("This part will be developped soon... ⏳️ ")
 
 
 
+################################
+# Optimized use of the battery for charging.
+################################
+if opt_to_use_smart_charging: 
+    print(" TODO ")
+
+
+    #Separate all the available data in subsets for each day of the year an timeseries and assess the smart charging:
+
+    #Method 1: with an pd groupby 
+    list_of_days = []
+    full_plim_list = []
+    k = 0
+
+    for day, day_df in df_pow_profile.groupby(df_pow_profile.index.date):
+        day_df["cumsum conso"] = day_df["Consumption [kW]"].cumsum()* 0.25
+        conso_of_the_day = (day_df["cumsum conso"].values[-1])
+        day_df["cumsum sol"] = day_df["Solar power scaled"].cumsum()* 0.25
+        solar_of_the_day = (day_df["cumsum sol"].values[-1])
+        day_df["cumsum balance"] = day_df["grid power reference"].cumsum()* 0.25 #with the reference without storage
+        balance_of_the_day = (day_df["cumsum balance"].values[-1]) #conso is positive
+
+        if balance_of_the_day > 0:
+            #in that case there is more consumption than production, in a first simple algorithm, we can
+            #simply say that there is no use to limit the charging 
+            # TODO: compute intraday limitations if the battery could be charged fully at certain times
+
+            power_limitation_factor_profile = np.ones(len(day_df))
+        else:
+            #here we could limit charging at certain time of the day and be able to recharge the battery
+            #first evaluate if this is full recharge or not: compared to the size of the battery
+            #then take some margin to be sure the battery can be fully charged.
+            #In this first simple algorithm the assumption is that the battery is empty:
+            # TODO: compare with the real initial SOC at the start of the day
+            # 
+            if -balance_of_the_day < battery_size_kwh_usr_input :
+                #here the battery cannot be fully charged if empty, (note: there is margin of the SOC for backup)
+                power_limitation_factor_profile = np.ones(len(day_df))
+            else:
+                #here the smart algo: 
+                b = (day_df["Solar power scaled"].values / day_df["Solar power scaled"].max() - 0.5 ) *2.0
+                b[b < 0] = 0
+                d = day_df["cumsum sol"].values / day_df["cumsum sol"].max()
+                power_limitation_factor_profile = np.maximum(b, d) # Element-wise maximum
+
+                #print(str(k) + "  :" +str(day) + f" energy produced {solar_of_the_day:.1f} kWh and used {conso_of_the_day:.1f} kWh")        # date (datetime.date)
+
+
+        # #For the visulisation of a single day for dev and debug:
+        # k = k+1
+        # if k == 150: 
+        #     a = day_df["Solar power scaled"].values / day_df["Solar power scaled"].max()
+        #     b = (day_df["Solar power scaled"].values / day_df["Solar power scaled"].max() - 0.5 ) *2.0
+        #     c = b.copy()
+        #     c[c < 0] = 0
+        #     d = day_df["cumsum sol"].values / day_df["cumsum sol"].max()
+        #     e = np.maximum(c, d) # Element-wise maximum
+
+        #     #Now transform this limit into the maximal charge power array of the battery: 
+        #     day_max_charging = e * solar_system.max_power_charge
+
+
+        #     #display for tests:
+        #     matrix = np.stack((a, b, c, d, e), axis=1)
+        #     fig_smart1 =build_test_figure(matrix) #day_df["Solar power scaled"].values
+        #     #fig_cumsum2 =build_test_figure(day_df["grid power reference"].values  ) #day_df["Solar power scaled"].values
+        #     st.pyplot(fig_smart1)
+            
+
+        #     fig_smart2 =build_test_figure(power_limitation_factor_profile)
+        #     st.pyplot(fig_smart2)
+
+        #     fig_smart3 =build_test_figure(day_max_charging)
+        #     st.pyplot(fig_smart3)
+
+
+        list_of_days.append(day_df)
+        full_plim_list.append(power_limitation_factor_profile)
+
+    # #print(full_plim_list)
+    # for i, arr in enumerate(full_plim_list):
+    #     print(f"Array {i} shape: {arr.shape}")
+
+    # finally convert to np array:
+    full_plim_array = np.concatenate(full_plim_list)
+
+    # fig_smart4 =build_test_figure(full_plim_array)
+    # st.pyplot(fig_smart4)
+
+else: 
+    full_plim_array= np.ones(length_profile)
+
+
+
+#and update the max charge profile for simulation:
+solar_system.battery_max_charge_setpoint_profile = full_plim_array * solar_system.max_power_charge
+
+df_pow_profile["Smart Charging"] = full_plim_array
+
+
+    
+# st.write("📋 **Data Overview head**")
+# st.dataframe(list_of_days[0].head())
+# st.dataframe(list_of_days[1].head())
+# st.dataframe(list_of_days[-1].head())
+
+
+
+# fig_scat1 = build_power_profile(df_pow_profile, "Solar power scaled")
+# st.pyplot(fig_scat1)
+
+fig_scat2 = build_power_profile(df_pow_profile, "Grid with storage")
+st.pyplot(fig_scat2)
+
+fig_scat3 = build_power_profile(df_pow_profile, "SOC")
+st.pyplot(fig_scat3)
+
+fig_scat4 = build_power_profile(df_pow_profile, "Smart Charging")
+st.pyplot(fig_scat4)
+
+
+#st.plotly_chart(fig_scat2)
+
+
+
 #st.markdown("---")
 
-# st.markdown("<span style='color:red'><b> TODO </b></span>", unsafe_allow_html=True)
+#st.markdown("<span style='color:red'><b> Smart Charging TODO </b></span>", unsafe_allow_html=True)
 
+
+
+################################
+# Optimized use of the battery for discharging:
+# -discharge at the best price time
+################################
 
 # st.markdown("---")
 # st.markdown("---")
