@@ -148,11 +148,11 @@ def build_consumption_heatmap_figure(hours_mean_df):
 
     # Resample the data to hourly intervals and aggregate using the mean or sum
     #hourly_data = data.resample('H').mean()  # or data.resample('H').sum()
-    energies_by_hours=hours_mean_df[all_channels_labels[channel_number_SOC[0]]]
+    energies_by_hours = hours_mean_df[all_channels_labels[channel_number_SOC[0]]]
 
     # Extract the values from the dataframe
     consumption_data = energies_by_hours.values
-    print(consumption_data)
+    #print(consumption_data)
 
     # Determine the shape of the reshaped array
     n_days = len(consumption_data) // (24)
