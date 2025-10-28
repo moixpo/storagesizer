@@ -45,7 +45,7 @@ with st.sidebar:
     st.title("⚙️ Simulation Settings ")
 
     st.write("🔋 Storage used for simulation")
-    battery_size_kwh_usr_input = st.slider("Battery capacity (kWh): ", min_value=2.0, max_value=50.0, value=10.0, step=1.0)
+    battery_size_kwh_usr_input = st.slider("Battery capacity (kWh): ", min_value=0.0, max_value=50.0, value=10.0, step=1.0)
     # On garde en state la dernière valeur courante
     st.session_state.battery_size_kwh_usr_input = battery_size_kwh_usr_input
 
@@ -118,9 +118,12 @@ with st.sidebar:
     batt_installation_price_user_input = st.slider("Battery fixed installation cost (CHF): ", min_value=0.0, max_value=5000.0, value=1000.0, step=100.0, help="That is for the electrician and the controller, you could also use this for other fixed components")
     price_slope = (batt_fifty_kWh_price_user_input-batt_five_kWh_price_user_input) / 45.0
     zero_crossing_value = batt_five_kWh_price_user_input - price_slope * 5.0
-
-    kWh_cost = zero_crossing_value + battery_size_kwh_usr_input * price_slope
-    batt_total_cost = batt_installation_price_user_input + battery_size_kwh_usr_input * kWh_cost
+    if battery_size_kwh_usr_input == 0:
+        kWh_cost = 0.0
+        batt_total_cost = 0.0
+    else:
+        kWh_cost = zero_crossing_value + battery_size_kwh_usr_input * price_slope
+        batt_total_cost = batt_installation_price_user_input + battery_size_kwh_usr_input * kWh_cost
     st.write(f"The {battery_size_kwh_usr_input :.0f} kWh battery is estimated at {kWh_cost :.0f} CHF/kWh and total system cost {batt_total_cost:.0f} CHF")
 
 
@@ -251,12 +254,12 @@ df_pow_profile = df_pow_profile.set_index("Time")
 pow_array_all = df_pow_profile["Consumption [kW]"].to_numpy()
 solar_array_all = df_pow_profile["Solar power [kW]"].to_numpy()
 solar_array_all_scaled = solar_array_all *solar_scale_usr_input / 100.0
-
+grid_array_all = pow_array_all-solar_array_all_scaled
 #save in dataframe for easy display:
 df_pow_profile["Solar power scaled"] = solar_array_all_scaled
 
 #All the series for the case with solar only and no storage will be the reference:
-df_pow_profile["grid power reference"] = pow_array_all-solar_array_all_scaled #all grid balance without storage with scaled solar
+df_pow_profile["grid power reference"] = grid_array_all #all grid balance without storage with scaled solar
 
 # Replace all positive values with 0 to have the injection only, note the injection is negative power on the grid
 df_pow_profile["grid injection reference"] = df_pow_profile["grid power reference"].mask(df_pow_profile["grid power reference"] > 0, 0.0)
@@ -366,7 +369,11 @@ solar_system.max_power_charge = battery_charge_power_kw #to update the max charg
 solar_system.max_power_discharge = -battery_charge_power_kw #same rate applied
 solar_system.max_inverter_power = 500 #kW  a high value in order not to have caping   # 15kW  for the next3
 solar_system.max_grid_injection_power = 500 #kW  a high value in order not to have caping 
-solar_system.selfpowerconsumption = INVERTER_STANDBY_W / 1000
+
+if battery_size_kwh_usr_input == 0.0:
+    solar_system.selfpowerconsumption = 0.0
+else:
+    solar_system.selfpowerconsumption = INVERTER_STANDBY_W / 1000
 solar_system.efficiency_batt_one_way = EFFICIENCY_BATT_ONE_WAY
 
 
@@ -619,18 +626,20 @@ for energy in energy_in_batt_array:
         sum_of_quarters = sum_of_quarters + power/4.0
         #compare energy 
         #TODO
-        if energy < sum_of_quarters:
+        if energy <= sum_of_quarters:
             #how many minutes of the last quarters exactly? TODO
             #TODO
             break
         n = n + 1
 
     energy_to_go[k] = sum_of_quarters
-    number_of_quarters[k] = n + 1
+    number_of_quarters[k] = n #+ 1
 
     k=k+1
 
 df_pow_profile["Energy in coming consumption"] = energy_to_go
+
+
 
 #TODO  : correctif sur les dernières heures de l'année qui ont un time to go qui tombe à 0 à cause de la fin des données.
 number_of_quarters[-8] = number_of_quarters[-9] 
@@ -645,6 +654,46 @@ df_pow_profile["Time of backup on battery"] = number_of_quarters / 4.0
 #TODO  : correctif sur les dernières heures de l'année qui ont un time to go qui tombe à 0 à cause de la fin des données.
 
 minimal_backup_time = df_pow_profile["Time of backup on battery"].min()
+
+
+
+# #####################################################
+# # Compute the time of backup with solar and storage: TODO
+# #########
+# energy_in_coming_consumption = np.zeros(length_profile)
+# energy_to_go = np.zeros(length_profile)
+# number_of_quarters = np.zeros(length_profile)
+# k=0
+# for energy in energy_in_batt_array:
+#     #from that point, how many quarters of conso equals to energy? 
+    
+#     sum_of_quarters = 0.0
+#     n = 0
+#     for power in grid_array_all[k:length_profile-1]:
+#         sum_of_quarters = sum_of_quarters + power/4.0
+#         #the sum of quarters must be capped by the battery size in negative to avoid to integrate too big solar charging.
+#         #compare energy 
+#         #TODO
+#         if sum_of_quarters < -battery_size_kwh_usr_input : #* 0.95 + energy :
+#             sum_of_quarters = -battery_size_kwh_usr_input #* 0.95 + energy
+
+#         if energy <= sum_of_quarters:
+#             #how many minutes of the last quarters exactly? TODO
+#             #TODO
+#             break
+#         n = n + 1
+
+#     energy_to_go[k] = sum_of_quarters
+#     number_of_quarters[k] = n #+ 1
+
+#     k=k+1
+
+# df_pow_profile["Energy in coming consumption and solar"] = energy_to_go
+
+
+# df_pow_profile["Time of backup on battery and solar"] = number_of_quarters / 4.0
+
+
 
 
 #*********************
@@ -692,10 +741,14 @@ day_kwh_df = hours_mean_df.resample('d').sum()
 month_kwh_df = day_kwh_df.resample('ME').sum() 
 
 batt_throughput_energy = -month_kwh_df['Battery discharge power only'].sum()
-equivalent_80percent_cycles =  batt_throughput_energy / battery_size_kwh_usr_input / 0.8
+if battery_size_kwh_usr_input == 0.0:
+    equivalent_80percent_cycles = 0.0
+    cost_of_stored_kWh_over_15_years = 0.0
+else :
+    equivalent_80percent_cycles =  batt_throughput_energy / battery_size_kwh_usr_input / 0.8
 
-#assuming the data are always for 1 full year: TODO make it in function of the data size
-cost_of_stored_kWh_over_15_years = batt_total_cost / 15.0 / batt_throughput_energy
+    #assuming the data are always for 1 full year: TODO make it in function of the data size
+    cost_of_stored_kWh_over_15_years = batt_total_cost / 15.0 / batt_throughput_energy
 
 
 
@@ -1260,7 +1313,7 @@ if opt_to_display_bkup:
 
     col1, col2 = st.columns(2)
     col1.metric("Minimal time of backup on battery", f" {minimal_backup_time} hours")
-    col2.metric("Minimal time of backup on battery and Solar", "TO DO")
+    col2.metric("Minimal time of backup on battery and solar", "TO DO")
 
     # #Use Time  as index:
     # df_pow_profile = df_pow_profile.set_index("Time")
@@ -1291,15 +1344,15 @@ if opt_to_display_bkup:
 
 
 
-
+    # ###########################
     # #For DEBUG: on the counted 
     # # Energy Consumption Plot using Plotly
     # fig_conso_coming = px.line(df_pow_profile, 
     #                         x=df_pow_profile.index, 
-    #                         y=["Energy in coming consumption on the counted quarters", "Energy to empty batt"], 
-    #                         title=" Coming consumption", 
+    #                         y=["Energy in coming consumption", "Energy to empty batt", "Energy in coming consumption and solar"], 
+    #                         title=" Coming consumption on quarters", 
     #                         labels={"value": "Com. Cons [kWh]", "variable": "Legend"},
-    #                         color_discrete_sequence=["red", "yellow"] 
+    #                         color_discrete_sequence=["red", "green", "yellow"] 
     # )
 
 
@@ -1314,13 +1367,15 @@ if opt_to_display_bkup:
     #     )
     # )
     # st.plotly_chart(fig_conso_coming)
+    # ###############################
 
 
-    # Energy Consumption Plot using Plotly
+
+    # Energy Consumption Plot using Plotly    #, "Time of backup on battery and solar"  , and on battery and solar "yellow"
     fig_batt_time_to_go = px.area(df_pow_profile, 
                             x=df_pow_profile.index, 
                             y=["Time of backup on battery"], 
-                            title=" Time of backup on batteries only 🌃  🪫 🏴", 
+                            title=" Time of backup on batteries only  🌃  🪫 🏴", 
                             labels={"value": "Backup time [h]", "variable": "Legend"},
                             color_discrete_sequence=["red"] 
     )

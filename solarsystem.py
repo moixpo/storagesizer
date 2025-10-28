@@ -554,7 +554,10 @@ class SolarSystem:
             
         
          #compute the SOC from the energy in the battery:
-         self.soc_profile = self.energy_in_batt_profile/self.batt_capacity_kWh*100
+         if self.batt_capacity_kWh == 0:
+             self.soc_profile = self.energy_in_batt_profile * 0.0
+         else:
+             self.soc_profile = self.energy_in_batt_profile/self.batt_capacity_kWh*100
         
 
          #compute the sums over the day:
