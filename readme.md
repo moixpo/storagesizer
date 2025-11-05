@@ -9,9 +9,14 @@ The user can:
 - Plot a **graph** of self-consumption ratio as a function of battery size,
 - Reset the history with a **Reset** button.
 
----
 
-## 🚀 Installation
+
+## 🚀 Deployement
+This can be directly used here: https://batterysizer.streamlit.app/
+
+
+
+## 🛠 Installation
 
 1. **Clone** or download the project  
    ```bash
@@ -27,4 +32,4 @@ Ask me for developpements
 ## Author
 
 Moix P-O  
-Last updated: September 27, 2025
+Last updated: November 5, 2025

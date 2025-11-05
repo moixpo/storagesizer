@@ -1,4 +1,4 @@
-# Interactive battery simulator v0.1
+# Interactive battery simulator 
 # Moix P-O ✌️
 # Albedo Engineering 2025
 # MIT licence
@@ -22,7 +22,7 @@ from advanced_figures import *
 #constants
 INVERTER_STANDBY_W = 50  #Watts
 SOC_FOR_END_OF_DISCHARGE = 5.0  #for islanding case
-EFFICIENCY_BATT_ONE_WAY = 0.95  #TODO make variable, transmit to the battery simulation
+EFFICIENCY_BATT_ONE_WAY  =  0.95  #TODO make variable, transmit to the battery simulation
 
 
 
@@ -156,7 +156,7 @@ with st.sidebar:
     st.markdown("---")
     st.write("**👷 More Advanced settings** ")
 
-    batt_charge_power_rate_user_input = st.slider("Battery max charge power rate (C): ", min_value=0.1, max_value=2.0, value=0.5, step=0.05, help="C rate relates the battery capacity to the power it can give.")
+    batt_charge_power_rate_user_input = st.slider("Battery max charge power rate (C): ", min_value=0.1, max_value=2.0, value=1.0, step=0.05, help="C rate relates the battery capacity to the power it can give.")
     battery_charge_power_kw = batt_charge_power_rate_user_input * battery_size_kwh_usr_input
     st.write("The max charge/discharge power is set to " + f"{battery_charge_power_kw :.1f}"+" kW")
     st.write("C/2 would be a reasonable charge/discharge limit, note that this limit is applied all day")
@@ -166,8 +166,6 @@ with st.sidebar:
 
     opt_to_use_smart_charging= st.checkbox("Use Smart Charging?")
     st.write("Smart charging reduce grid peak injection, minimize the time with high batteries if possible.")
-    st.write("Smart charging is under developpement... not perfect yet.")
-
 
 
     # st.markdown("---")
@@ -185,7 +183,7 @@ with st.sidebar:
 
 
     st.markdown("---")
-    st.write("Battery sizer, version 0.5")
+    st.write("Battery sizer, version 0.6")
     st.write("✌️ Moix P-O, 2025")
     st.write("Streamlit for interactive dashboards...")
     
@@ -414,6 +412,7 @@ if opt_to_use_smart_charging:
     #Method 1: with an pd groupby 
     list_of_days = []
     full_plim_list = []
+    full_day_max_charging_power_profile_list = []
     k = 0
 
     for day, day_df in df_pow_profile.groupby(df_pow_profile.index.date):
@@ -423,103 +422,162 @@ if opt_to_use_smart_charging:
         solar_of_the_day = (day_df["cumsum sol"].values[-1])
         day_df["cumsum balance"] = day_df["grid power reference"].cumsum()* 0.25 #with the reference without storage
         balance_of_the_day = (day_df["cumsum balance"].values[-1]) #conso is positive
+        
+        #take the excess that could be stored to the battery, taking into account max charge power and efficiency
+        excess_that_can_be_stored=-day_df["grid injection reference"].values * EFFICIENCY_BATT_ONE_WAY
+        excess_that_can_be_stored[excess_that_can_be_stored > solar_system.max_power_charge] = solar_system.max_power_charge
+
+        solar_excess_of_the_day = abs(excess_that_can_be_stored.sum() / 4.0)
+
         min_soc_day = day_df["SOC"].min()
         max_soc_day = day_df["SOC"].max()
 
-        space_in_the_battery = (100.0-min_soc_day)/100.0 * battery_size_kwh_usr_input
-        #print(day, f" space in the battery: {space_in_the_battery:1f} kWh")
+        max_space_in_the_battery = (100.0-min_soc_day)/100.0 * battery_size_kwh_usr_input
 
-        if balance_of_the_day > 0:
-            #in that case there is more consumption than production, in a first simple algorithm, we can
+        #the available space for energy is given in the min of SOC in the morning
+        size_vector_morning=int( len(day_df) / 2 ) + 1
+        min_soc_of_morning =day_df["SOC"].values[0:size_vector_morning].min()
+        energy_to_fill = (100.0 - min_soc_of_morning) / 100.0 * battery_size_kwh_usr_input
+        
+        print(day, f" space in the battery: {max_space_in_the_battery :.2f} kWh")
+
+
+        #first evaluate if full recharge is possible or not: 
+        #then take some margin to be sure the battery can be fully charged.
+        MARGIN_FACTOR_ON_RECHARGE = 1.05 #5% margin to be sure to charge the batt 
+
+        # if the solar excess is not sufficient to charge the battery, no need to limit charging 
+        if solar_excess_of_the_day < energy_to_fill * MARGIN_FACTOR_ON_RECHARGE :
+            
+            #in a first simple algorithm, we can
             #simply say that there is no use to limit the charging 
-            # TODO: compute intraday limitations if the battery could be charged fully at certain times (with max_soc_day)
+            # TODO: compute intraday limitations if the battery could be charged fully at certain times and discharged again later (with max_soc_day)
 
             power_limitation_factor_profile = np.ones(len(day_df))
+            day_max_charging_power_profile = np.ones(len(day_df)) * solar_system.max_power_charge
+            scale_used = 1.0
+            scaled_excess = excess_that_can_be_stored / scale_used
+            peak_search_level = 0.0
+            peak_array = scaled_excess
         else:
             #here we could limit charging at certain time of the day and be able to recharge the battery
-            #first evaluate if this is full recharge or not: compared to the size of the battery
-            #then take some margin to be sure the battery can be fully charged.
-            #In this first simple algorithm the assumption is that the battery is empty:
-            # TODO: compare with the real initial SOC at the start of the day
-            # 
-            if -balance_of_the_day < space_in_the_battery :
-                #here the battery may not be fully charged (TODO: that could be fully charge but load the rest of the day is too big
-                power_limitation_factor_profile = np.ones(len(day_df))
-            else:
-                #here the smart algo: 
-                b = (day_df["Solar power scaled"].values / day_df["Solar power scaled"].max() - 0.75 ) *4.0
-                b[b < 0] = 0
-                b[b > 1.0] = 1.0
 
-                #has this profile enough energy to store in the battery with the peak? let's try to capture only the peak injection
-                storage_potential_profile = -b * day_df["grid injection reference"] #note that the C rate is not taken into account here : TODO
-                e_with_this = storage_potential_profile.sum()/4
+            #######################################
+            # the smart algo 2:
+            # search in the peak solar power which level corresponds to the battery left room.
+            # Warning, here it is done with the real measurements but in reality that should be done with the production and consumption forecast.
 
-                #compared to the battery space_in_the_battery
-                if e_with_this >= 0:  #check the zero value division
-                    factor = space_in_the_battery / e_with_this 
+            #scaled available solar excess power:
+            scale_used=abs(excess_that_can_be_stored.max())
+            scaled_excess = excess_that_can_be_stored / scale_used
+            e_to_fill_scaled = energy_to_fill / scale_used
+
+
+            #15 iterations to find where the peak power corresponds to energy to be charged in the battery:
+            #init:
+            peak_search_level = 0.5
+            step = 0.5
+            direction = 1.0
+            peak_search_level_array= [] #to track evolution
+            energy_peak_prod_array= [] #to track evolution
+
+            for i in range(15): 
+                
+                peak_array = scaled_excess - peak_search_level
+                #remove negative value and compute energy of the peak
+                peak_array[peak_array < 0] = 0.0
+                energy_peak_prod = peak_array.sum()/4.0
+
+                #tracking:
+                energy_peak_prod_array.append(energy_peak_prod)
+                peak_search_level_array.append(peak_search_level)
+
+                #if energy is not enough, we can make an step smaller and increase the surface with negative direction
+                if energy_peak_prod < e_to_fill_scaled :
+                    step = step / 2.0
+                    direction = -1
                 else: 
-                    factor = 1.0
+                    direction = 1
 
-                #print(day, f" space in the battery: {space_in_the_battery:.1f} kWh, potential to store {e_with_this :.1f}, factor {factor :0.1f}")
-                b=b*factor
-                b[b > 1.0] = 1.0
+                #search further
+                peak_search_level = peak_search_level + step * direction
 
-                d = day_df["cumsum sol"].values / day_df["cumsum sol"].max()-0.25
-                power_limitation_factor_profile = np.maximum(b, d) # Element-wise maximum
+            
+            #the exact match is found, use one with a margin; TODO: for days with not much energy in the afternoon take more margin, for days with a lot of afternoon sun that shoudl be sufficient: 
+            peak_array = scaled_excess - peak_search_level * MARGIN_FACTOR_ON_RECHARGE
+            #remove negative value and compute energy of the peak
+            peak_array[peak_array < 0] = 0.0
 
-                #print(str(k) + "  :" +str(day) + f" energy produced {solar_of_the_day:.1f} kWh and used {conso_of_the_day:.1f} kWh")        # date (datetime.date)
+            #and let recharge at the end of the afternon, that will give some margin for prediction errors:
+            d = day_df["cumsum sol"].values / day_df["cumsum sol"].max()-0.75
 
+            power_limitation_factor_profile = np.maximum(peak_array, d) # Element-wise  and rescaling to power in kW
+            day_max_charging_power_profile = power_limitation_factor_profile * scale_used
+
+            #print(day, f"Space in batt: {energy_to_fill :.2f} kWh for solar {solar_excess_of_the_day :.2f} and it is scaled to {e_to_fill_scaled :.2f} and {(solar_excess_of_the_day / scale_used): .2f}, found {energy_peak_prod : .2f}")
+            #print(peak_search_level_array)
 
         # #For the visulisation of a single day for dev and debug:
         # k = k+1
-        # if k == 150: 
-        #     a = day_df["Solar power scaled"].values / day_df["Solar power scaled"].max()
-        #     b = (day_df["Solar power scaled"].values / day_df["Solar power scaled"].max() - 0.5 ) *2.0
-        #     c = b.copy()
-        #     c[c < 0] = 0
-        #     d = day_df["cumsum sol"].values / day_df["cumsum sol"].max()
-        #     e = np.maximum(c, d) # Element-wise maximum
+        # if k == 160: 
+            
+        #     # #algo 1:
+        #     # a = day_df["Solar power scaled"].values / day_df["Solar power scaled"].max()
+        #     # b = (day_df["Solar power scaled"].values / day_df["Solar power scaled"].max() - 0.75 ) *4.0
+        #     # c = b.copy()
+        #     # c[c < 0] = 0
+        #     # d = day_df["cumsum sol"].values / day_df["cumsum sol"].max()-0.5
+        #     # e = np.maximum(c, d) # Element-wise maximum
 
+        #     #algo 2:
+        #     a = scaled_excess
+        #     b = scaled_excess-peak_search_level
+        #     c = peak_array
+        #     d = day_df["cumsum sol"].values / day_df["cumsum sol"].max()-0.75
+        #     e = power_limitation_factor_profile
         #     #Now transform this limit into the maximal charge power array of the battery: 
-        #     day_max_charging = e * solar_system.max_power_charge
+        #     #day_max_charging = e * solar_system.max_power_charge
 
-
+        
         #     #display for tests:
         #     matrix = np.stack((a, b, c, d, e), axis=1)
         #     fig_smart1 =build_test_figure(matrix) #day_df["Solar power scaled"].values
         #     #fig_cumsum2 =build_test_figure(day_df["grid power reference"].values  ) #day_df["Solar power scaled"].values
         #     st.pyplot(fig_smart1)
             
-
-        #     fig_smart2 =build_test_figure(power_limitation_factor_profile)
+        #     fig_smart2 =build_test_figure(day_df["SOC"].values) #power_limitation_factor_profile)
         #     st.pyplot(fig_smart2)
 
-        #     fig_smart3 =build_test_figure(day_max_charging)
+        #     fig_smart3 =build_test_figure(day_max_charging_power_profile ) # day_df["grid injection reference"].values / day_df["grid injection reference"].min())
         #     st.pyplot(fig_smart3)
 
 
         list_of_days.append(day_df)
         full_plim_list.append(power_limitation_factor_profile)
+        full_day_max_charging_power_profile_list.append(day_max_charging_power_profile)
+
 
     # #print(full_plim_list)
     # for i, arr in enumerate(full_plim_list):
     #     print(f"Array {i} shape: {arr.shape}")
 
+
     # finally convert to np array:
     full_plim_array = np.concatenate(full_plim_list)
+    full_day_max_charging_power_profile_array = np.concatenate(full_day_max_charging_power_profile_list)
+
 
     # fig_smart4 =build_test_figure(full_plim_array)
     # st.pyplot(fig_smart4)
 
 else: 
-    full_plim_array= np.ones(length_profile)
-
+    full_plim_array = np.ones(length_profile)
+    full_day_max_charging_power_profile_array = np.ones(length_profile) * solar_system.max_power_charge
 
 #and update the max charge profile for simulation:
-solar_system.battery_max_charge_setpoint_profile = full_plim_array * solar_system.max_power_charge
+solar_system.battery_max_charge_setpoint_profile = full_day_max_charging_power_profile_array #full_plim_array * solar_system.max_power_charge
 #store it for later:
-df_pow_profile["Smart Charging"] = full_plim_array
+df_pow_profile["Smart Charging"] = full_day_max_charging_power_profile_array #full_plim_array
 
 
 
@@ -1078,6 +1136,17 @@ if opt_to_display_plots:
     
 
     #st.metric(label="gain with storage", value=4, delta=-0.5, delta_color="inverse")
+    
+    st.write(" Figure to see the effect of the Smartcharging algorithm ")
+
+    fig_scat2 = build_power_profile(df_pow_profile, "Grid with storage")
+    st.pyplot(fig_scat2)
+
+    fig_scat3 = build_power_profile(df_pow_profile, "SOC")
+    st.pyplot(fig_scat3)
+
+    fig_scat4 = build_power_profile(df_pow_profile, "Smart Charging")
+    st.pyplot(fig_scat4)
 
 
 
@@ -1505,14 +1574,6 @@ st.write("This part will be developped soon... ⏳️ ")
 # fig_scat1 = build_power_profile(df_pow_profile, "Solar power scaled")
 # st.pyplot(fig_scat1)
 
-fig_scat2 = build_power_profile(df_pow_profile, "Grid with storage")
-st.pyplot(fig_scat2)
-
-fig_scat3 = build_power_profile(df_pow_profile, "SOC")
-st.pyplot(fig_scat3)
-
-fig_scat4 = build_power_profile(df_pow_profile, "Smart Charging")
-st.pyplot(fig_scat4)
 
 
 #st.plotly_chart(fig_scat2)
