@@ -11,7 +11,7 @@ import numpy as np
 import plotly.express as px
 import matplotlib.pyplot as plt
 import datetime
-import random as rnd
+#import random as rnd
 
 #home made import:
 #from groupe_e_access_functions import *
@@ -19,10 +19,10 @@ import random as rnd
 from solarsystem import *
 from advanced_figures import *
 
-#constants
+#constants TODO: put them as variable in the menu
 INVERTER_STANDBY_W = 50  #Watts
-SOC_FOR_END_OF_DISCHARGE = 5.0  #for islanding case
 EFFICIENCY_BATT_ONE_WAY  =  0.95  #TODO make variable, transmit to the battery simulation
+SOC_FOR_END_OF_DISCHARGE = 5.0  #for islanding case
 
 
 
@@ -36,6 +36,7 @@ if "battery_size_kwh_usr_input" not in st.session_state:
 if "simulation_results_history" not in st.session_state:
     st.session_state.simulation_results_history = []
     
+
 
 #**************
 # SIDEBAR
@@ -53,7 +54,6 @@ with st.sidebar:
     st.markdown("---")
     st.write("☀️ Solar used for simulation, scale from original data measured on each house")
     solar_scale_usr_input = st.slider("Solar installed (%): ", min_value=0.0, max_value=300.0, value=100.0, step=10.0)
-    
     
     
     st.markdown("---")
@@ -165,11 +165,10 @@ with st.sidebar:
     soc_init_user_input = st.slider("Battery initial SOC for simulation (%): ", min_value=20.0, max_value=100.0, value=50.0, step=1.0)
 
     opt_to_use_smart_charging= st.checkbox("Use Smart Charging?")
-    st.write("Smart charging reduce grid peak injection, minimize the time with high batteries if possible.")
+    st.write("Smart charging reduce grid peak injection by waiting to recharge at the proper time, minimize the time with high batteries if possible.")
 
 
     # st.markdown("---")
-
 
     # st.markdown("---")
     # st.write("⏱️📈 📊 Planification with simple charge and discharge setpoint")
@@ -323,7 +322,6 @@ df_pow_profile["price buy"] = price_array_buy
 df_pow_profile["price sell PV"] = price_array_sell_pv
 
 
-
 # compute the costs based on the selected price for the consumption only, it must be done for every quarters because 
 df_pow_profile["CostForBuyingNoSolar"] = (df_pow_profile["Consumption [kW]"] * df_pow_profile["price buy"]/4.0)   
 cost_buying_no_solar_chf = df_pow_profile["CostForBuyingNoSolar"].sum()
@@ -343,7 +341,6 @@ sellings_solar_only_chf = df_pow_profile["SellSolarOnly"].sum()
 #*********************
 # Perform the battery simulation
 #*********************
-
 
 
 ##########################################
@@ -404,7 +401,6 @@ solar_system.load_data_for_simulation(pow_array_all, solar_array_all_scaled, tim
 
 if opt_to_use_smart_charging: 
 
-    
     #run the simulation an firt time with the loaded data to have an estimate of the SOC:
     solar_system.run_storage_simulation(print_res=False)
     df_pow_profile["SOC"] = solar_system.soc_profile 
@@ -439,8 +435,7 @@ if opt_to_use_smart_charging:
         min_soc_of_morning =day_df["SOC"].values[0:size_vector_morning].min()
         energy_to_fill = (100.0 - min_soc_of_morning) / 100.0 * battery_size_kwh_usr_input
         
-        print(day, f" space in the battery: {max_space_in_the_battery :.2f} kWh")
-
+        #print(day, f" space in the battery: {max_space_in_the_battery :.2f} kWh")
 
         #first evaluate if full recharge is possible or not: 
         #then take some margin to be sure the battery can be fully charged.
@@ -557,10 +552,6 @@ if opt_to_use_smart_charging:
         full_day_max_charging_power_profile_list.append(day_max_charging_power_profile)
 
 
-    # #print(full_plim_list)
-    # for i, arr in enumerate(full_plim_list):
-    #     print(f"Array {i} shape: {arr.shape}")
-
 
     # finally convert to np array:
     full_plim_array = np.concatenate(full_plim_list)
@@ -626,7 +617,6 @@ storage_value = delta_e_batt * mean_price_with_storage # np.mean(cost_normal_pro
 #*********************
 # Computations for the peak power
 
-
 peak_power_of_production = df_pow_profile["Solar power scaled"].max()
 
 peak_grid_consumption_with_solar = df_pow_profile["grid consumption reference"].max()
@@ -664,7 +654,6 @@ df_pow_profile["Energy to empty batt"] = (df_pow_profile["SOC"]- SOC_FOR_END_OF_
 #time to empty batt in hours
 #for each 
 #lets iterate that on the two in np:
-#TODO  
 energy_in_batt_array = df_pow_profile["Energy to empty batt"].values
 energy_in_coming_consumption = np.zeros(length_profile)
 energy_to_go = np.zeros(length_profile)
@@ -747,7 +736,6 @@ minimal_backup_time = df_pow_profile["Time of backup on battery"].min()
 #     k=k+1
 
 # df_pow_profile["Energy in coming consumption and solar"] = energy_to_go
-
 
 # df_pow_profile["Time of backup on battery and solar"] = number_of_quarters / 4.0
 
