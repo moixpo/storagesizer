@@ -1,6 +1,6 @@
 # 📊 Streamlit Battery Simulation Demo
 
-This project is a **Streamlit** application that demonstrates the impact of battery size on different simulated indicators (autonomy, self-consumption ratio, etc.).
+This project is a **Streamlit** application that demonstrates the impact of battery size on different simulated indicators (autonomy, self-consumption ratio, etc.). It includes the simulation of a lot of cases that can happen in the real world: grid feeding limitation, need of a backup, need of peak shaving...
 
 The user can:
 - Select a battery capacity with a **slider**,
@@ -27,9 +27,9 @@ This can be directly used here: https://batterysizer.streamlit.app/
 
 MIT + buy me a coffee ;-)
 
-Ask me for developpements
+The value is a little bit in having the code, and a lot in the ability to apply it to a real case for an customer. Please contact me for developpements/consulting.
 
 ## Author
 
 Moix P-O  
-Last updated: November 5, 2025
+Last updated: v0.7 November 6, 2025

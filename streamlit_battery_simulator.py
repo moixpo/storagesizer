@@ -164,8 +164,18 @@ with st.sidebar:
     st.write(" ")
     soc_init_user_input = st.slider("Battery initial SOC for simulation (%): ", min_value=20.0, max_value=100.0, value=50.0, step=1.0)
 
+
+    opt_to_limit_gridfeeding= st.checkbox("Use grid feeding limitation (curtailment) ?")
+    if opt_to_limit_gridfeeding:
+        pv_injection_curtailment_user_input = st.slider("🚫 PV max grid feeding power (% of peak prod): ", min_value=0.0, max_value=100.0, value=60.0, step=1.0)
+        st.write("The power above this limit will be lost. " \
+        "\n Note: normally this factor is applied to the installed power, here it is applied on the peak of production profile as the exact DC kWp is not known")
+    else :
+        pv_injection_curtailment_user_input = 100.0 #a large value to have no limitation
+        
     opt_to_use_smart_charging= st.checkbox("Use Smart Charging?")
     st.write("Smart charging reduce grid peak injection by waiting to recharge at the proper time, minimize the time with high batteries if possible.")
+
 
 
     # st.markdown("---")
@@ -208,7 +218,7 @@ if len(st.session_state.simulation_results_history)==0:
     - the cost of storage 
 
     
-    Various interactive plots of the power fluxes are given to vizualize what happens exactly in the house. 
+    Various interactive plots of the power fluxes are given to vizualize what happens exactly in the house. At the end of the page there is a table with all the results that can be downloaded in csv format to do your own charts (excel,...).
     
     It is possible to activate a peak shaving function and asses if the storage is able to make it. It is also possible to study the backup time available.
              
@@ -222,8 +232,8 @@ if len(st.session_state.simulation_results_history)==0:
 
 
 ####################
-# FIRST: LOAD DATA AND PERFORM SIMULATION WITH USER ENTRIES
-#********************************************************
+# FIRST: LOAD DATA 
+#********************
 
 
 # Current local datetime
@@ -247,41 +257,22 @@ df_pow_profile = df_pow_profile.set_index("Time")
 # st.dataframe(df_pow_profile.head())
 
 
-#take the data of the power profile un numpy (format for simulation)
+#take the data of the power profile in numpy (format for simulation)
 pow_array_all = df_pow_profile["Consumption [kW]"].to_numpy()
 solar_array_all = df_pow_profile["Solar power [kW]"].to_numpy()
 solar_array_all_scaled = solar_array_all *solar_scale_usr_input / 100.0
-grid_array_all = pow_array_all-solar_array_all_scaled
+
+
 #save in dataframe for easy display:
 df_pow_profile["Solar power scaled"] = solar_array_all_scaled
 
-#All the series for the case with solar only and no storage will be the reference:
-df_pow_profile["grid power reference"] = grid_array_all #all grid balance without storage with scaled solar
-
-# Replace all positive values with 0 to have the injection only, note the injection is negative power on the grid
-df_pow_profile["grid injection reference"] = df_pow_profile["grid power reference"].mask(df_pow_profile["grid power reference"] > 0, 0.0)
-# Replace all negative values with 0 to have the consumption only
-df_pow_profile["grid consumption reference"] = df_pow_profile["grid power reference"].mask(df_pow_profile["grid power reference"] < 0, 0.0)
-
-
-
-#Add the column to the dataframe:
-consumption_kWh = df_pow_profile["Consumption [kW]"].sum()/4.0
-original_production_kWh = df_pow_profile["Solar power [kW]"].sum()/4.0 #from dataset
-scaled_production_kWh = df_pow_profile["Solar power scaled"].sum()/4.0 #scaled and used
-
-reference_grid_injection_kWh = -df_pow_profile["grid injection reference"].sum()/4.0
-reference_grid_consumption_kWh = df_pow_profile["grid consumption reference"].sum()/4.0
-
-reference_self_consumption_ratio = (scaled_production_kWh-reference_grid_injection_kWh) / scaled_production_kWh * 100
-reference_autarky_ratio = (consumption_kWh-reference_grid_consumption_kWh) / consumption_kWh * 100.0  
-
 #*********************
-# Computations for the peak power
+# Computations for the peak shaving and curtailment from the peak powers
 peak_power_of_consumption = df_pow_profile["Consumption [kW]"].max()
 clipping_level = peak_shaving_user_input*peak_power_of_consumption/100.0
 
-
+peak_power_of_production = df_pow_profile["Solar power scaled"].max()
+pv_injection_curtailment_power = pv_injection_curtailment_user_input *peak_power_of_production/100
 
 #***********************
 #Load the wanted prices
@@ -322,6 +313,84 @@ df_pow_profile["price buy"] = price_array_buy
 df_pow_profile["price sell PV"] = price_array_sell_pv
 
 
+
+
+
+#*********************
+# Perform the simulation
+#*********************
+
+
+##########################################
+#Let's simulate the solar system 
+#########################################################################
+# with the solarsystem.py object:
+
+solar_system = SolarSystem("M-P-O","Rue du Solaire 6, 2050 Transition" )
+
+# properties initialisation  
+solar_system.batt_capacity_kWh = battery_size_kwh_usr_input #10*1 # in kWh
+solar_system.soc_init = soc_init_user_input # in %
+solar_system.soc_for_backup_user = batt_soc_for_backup_user_input
+solar_system.soc_for_peak_shaving_user = batt_soc_for_peak_user_input
+solar_system.peak_shaving_activated = opt_to_use_peak_shaving
+solar_system.max_grid_injection_power = pv_injection_curtailment_power #kW  a high value in order not to have caping 
+
+
+#For TEST, warning, TODO
+solar_system.peak_shaving_limit = clipping_level #kW
+
+solar_system.max_power_charge = battery_charge_power_kw #to update the max charge used by default independently of the battery size
+solar_system.max_power_discharge = -battery_charge_power_kw #same rate applied
+solar_system.max_inverter_power = 500 #kW  a high value in order not to have caping   # 15kW  for the next3
+
+if battery_size_kwh_usr_input == 0.0:
+    solar_system.selfpowerconsumption = 0.0
+else:
+    solar_system.selfpowerconsumption = INVERTER_STANDBY_W / 1000
+solar_system.efficiency_batt_one_way = EFFICIENCY_BATT_ONE_WAY
+
+# solar_system.gps_location = [46.208, 7.394] 
+# solar_system.pv_kW_installed = 9.24 #power installed on the roof
+# solar_system.roof_orientation = -10 # 0=S, 90°=W, -90°=E, -180°=N (or -180)
+# solar_system.roof_slope = 25.0
+# solar_system.comment = "installed in June 2022"
+
+
+#load data in the module for simulation:
+solar_system.load_data_for_simulation(pow_array_all, solar_array_all_scaled, timestep=0.25)
+
+
+##########################################
+#Let's simulate the solar system without battery for reference:
+solar_system.run_simple_simulation(print_res=False)
+
+
+#Take the results of the simple simulation:
+grid_array_all = solar_system.net_grid_balance_profile
+reference_curtailment_lost_energy_kwh = sum(solar_system.lostproduction_profile)/4.0
+
+#All the series for the case with solar only and no storage will be the reference:
+df_pow_profile["grid power reference"] = grid_array_all #all grid balance without storage with scaled solar
+
+# Replace all positive values with 0 to have the injection only, note the injection is negative power on the grid
+df_pow_profile["grid injection reference"] = df_pow_profile["grid power reference"].mask(df_pow_profile["grid power reference"] > 0, 0.0)
+# Replace all negative values with 0 to have the consumption only
+df_pow_profile["grid consumption reference"] = df_pow_profile["grid power reference"].mask(df_pow_profile["grid power reference"] < 0, 0.0)
+
+
+consumption_kWh = df_pow_profile["Consumption [kW]"].sum()/4.0
+original_production_kWh = df_pow_profile["Solar power [kW]"].sum()/4.0 #from dataset
+scaled_production_kWh = df_pow_profile["Solar power scaled"].sum()/4.0 #scaled and used
+
+reference_grid_injection_kWh = -df_pow_profile["grid injection reference"].sum()/4.0
+reference_grid_consumption_kWh = df_pow_profile["grid consumption reference"].sum()/4.0
+
+reference_self_consumption_ratio = (scaled_production_kWh - reference_grid_injection_kWh - reference_curtailment_lost_energy_kwh) / scaled_production_kWh * 100
+reference_autarky_ratio = (consumption_kWh - reference_grid_consumption_kWh) / consumption_kWh * 100.0  
+
+
+
 # compute the costs based on the selected price for the consumption only, it must be done for every quarters because 
 df_pow_profile["CostForBuyingNoSolar"] = (df_pow_profile["Consumption [kW]"] * df_pow_profile["price buy"]/4.0)   
 cost_buying_no_solar_chf = df_pow_profile["CostForBuyingNoSolar"].sum()
@@ -338,50 +407,11 @@ sellings_solar_only_chf = df_pow_profile["SellSolarOnly"].sum()
 
 
 
-#*********************
-# Perform the battery simulation
-#*********************
-
-
-##########################################
-#Let's simulate the solar system with a battery:
-#########################################################################
-# with the solarsystem.py object:
-
-solar_system = SolarSystem("M-P-O","Rue du Solaire 6, 2050 Transition" )
-
-# properties initialisation  
-solar_system.batt_capacity_kWh = battery_size_kwh_usr_input #10*1 # in kWh
-solar_system.soc_init = soc_init_user_input # in %
-solar_system.soc_for_backup_user = batt_soc_for_backup_user_input
-solar_system.soc_for_peak_shaving_user = batt_soc_for_peak_user_input
-solar_system.peak_shaving_activated = opt_to_use_peak_shaving
-
-#For TEST, warning, TODO
-solar_system.peak_shaving_limit = clipping_level #kW
-
-solar_system.max_power_charge = battery_charge_power_kw #to update the max charge used by default independently of the battery size
-solar_system.max_power_discharge = -battery_charge_power_kw #same rate applied
-solar_system.max_inverter_power = 500 #kW  a high value in order not to have caping   # 15kW  for the next3
-solar_system.max_grid_injection_power = 500 #kW  a high value in order not to have caping 
-
-if battery_size_kwh_usr_input == 0.0:
-    solar_system.selfpowerconsumption = 0.0
-else:
-    solar_system.selfpowerconsumption = INVERTER_STANDBY_W / 1000
-solar_system.efficiency_batt_one_way = EFFICIENCY_BATT_ONE_WAY
 
 
 
-# solar_system.gps_location = [46.208, 7.394] 
-# solar_system.pv_kW_installed = 9.24 #power installed on the roof
-# solar_system.roof_orientation = -10 # 0=S, 90°=W, -90°=E, -180°=N (or -180)
-# solar_system.roof_slope = 25.0
-# solar_system.comment = "installed in June 2022"
 
-
-#load data in the module for simulation:
-solar_system.load_data_for_simulation(pow_array_all, solar_array_all_scaled, timestep=0.25)
+# load data in the module for simulation:
 
 # # #Test of some control variable:
 # charge_command_array= df_price_varioplus["ChargeCommand"].to_numpy()
@@ -391,7 +421,6 @@ solar_system.load_data_for_simulation(pow_array_all, solar_array_all_scaled, tim
 # solar_system.delta_p_on_ac_source_profile = charge_command_array * battery_charge_power_kw
 # #let discharging only during this time:
 # solar_system.battery_max_discharge_setpoint_profile = - discharge_command_array * battery_charge_power_kw
-
 
 
 ################################
@@ -580,6 +609,12 @@ solar_system.run_storage_simulation(print_res=False)
 grid_power_with_storage_array = solar_system.net_grid_balance_profile
 df_pow_profile["Grid with storage"] = grid_power_with_storage_array 
 
+#The losses due to PV injection limitation is
+df_pow_profile["PV curtailment"] = solar_system.lostproduction_profile
+curtailment_lost_energy_kWh =df_pow_profile["PV curtailment"].sum()/4.0
+
+
+
 battery_power_array = solar_system.clamped_batt_pow_profile
 df_pow_profile["Battery power"] = battery_power_array 
 #separate the positive and the negative power to compute charge and discharge energy:
@@ -598,17 +633,17 @@ df_pow_profile["SOC"] = soc_array
 df_pow_profile["CostForBuyingWithStorage"] = (df_pow_profile["Grid consumption with storage"] * df_pow_profile["price buy"]/4.0)   #note, result is true/false, and .astype(int) convert to 1/0
 cost_buying_solar_storage_chf = df_pow_profile["CostForBuyingWithStorage"].sum()
 #print("Price paid with storage:", cost_buying_solar_storage_chf)
-consumption_kWh_with_storage = df_pow_profile["Grid consumption with storage"].sum()/4.0
+grid_consumption_kWh_with_storage = df_pow_profile["Grid consumption with storage"].sum()/4.0
 
 df_pow_profile["SellSolarWithStorage"] = (-df_pow_profile["Grid injection with storage"] * df_pow_profile["price sell PV"]/4.0)   
 sellings_solar_storage_chf = df_pow_profile["SellSolarWithStorage"].sum()
 #print("Sold PV electricity with with solar only, no storage:", sellings_solar_storage_chf)
-injection_kWh_with_storage = -df_pow_profile["Grid injection with storage"].sum()/4.0
+grid_injection_kWh_with_storage = -df_pow_profile["Grid injection with storage"].sum()/4.0
 
 #bilan batterie  
 delta_e_batt=(soc_array[-1]-soc_array[0])/100.0*battery_size_kwh_usr_input  #last SOC - first SOC of the simulation
 #valorisé au prix moyen de la journée:
-mean_price_with_storage = cost_buying_solar_storage_chf/consumption_kWh_with_storage
+mean_price_with_storage = cost_buying_solar_storage_chf/grid_consumption_kWh_with_storage
 storage_value = delta_e_batt * mean_price_with_storage # np.mean(cost_normal_profile_with_vario_with_storage/consumption_kWh)
 
 
@@ -743,42 +778,11 @@ minimal_backup_time = df_pow_profile["Time of backup on battery"].min()
 
 
 #*********************
-# Get the results
+# Analyse the results
 
-sim_grid_injection_kWh = injection_kWh_with_storage
-sim_grid_consumption = consumption_kWh_with_storage
+self_consumption_ratio_with_storage = (scaled_production_kWh-grid_injection_kWh_with_storage-curtailment_lost_energy_kWh) / scaled_production_kWh * 100
+autarky_ratio_with_storage = (consumption_kWh-grid_consumption_kWh_with_storage) / consumption_kWh * 100.0  
 
-sim_cost_buying_electricity_chf = cost_buying_solar_storage_chf
-sim_sellings_solar_chf = sellings_solar_storage_chf
-sim_bill = bill_with_storage
-
-reference_self_consumption_ratio = (scaled_production_kWh-reference_grid_injection_kWh) / scaled_production_kWh * 100
-
-sim_self_consumption_ratio = (scaled_production_kWh-injection_kWh_with_storage) / scaled_production_kWh * 100
-sim_autarky_ratio = (consumption_kWh-consumption_kWh_with_storage) / consumption_kWh * 100.0  
-
-
-
-# # Energy Consumption Plot using Plotly
-# fig_simstorage_profile = px.line(df_pow_profile, 
-#                         x=df_pow_profile.index, 
-#                         y=[ "Consumption [kW]","Solar"], 
-#                         title="⚡ Consumption and production", 
-#                         labels={"value": "Power (kW)", "variable": "Legend"},
-#                         color_discrete_sequence=["blue", "orange"]
-# )
-    
-# # Move legend below the graph
-# fig_simstorage_profile.update_layout(
-#     legend=dict(
-#         orientation="h",
-#         yanchor="top",
-#         y=-0.2,  # Position below the graph
-#         xanchor="center",
-#         x=0.1
-#     )
-# )
-# st.plotly_chart(fig_simstorage_profile)
 
 
 #save hours sampling for heatmap display:
@@ -800,7 +804,6 @@ else :
 
 
 
-
 # --- Enregistrement dans l'historique ---
 st.session_state.simulation_results_history.append({
     "timestamp": datetime.datetime.now(),  # horodatage 
@@ -815,23 +818,33 @@ st.session_state.simulation_results_history.append({
     "Level of peak shaving (%)" : peak_shaving_user_input, 
     "Battery SOC for peak shaving (%)" : batt_soc_for_peak_user_input,
     "Dataset choice": dataset_choice,
-    "Self-consumption ratio with storage (%)": sim_self_consumption_ratio,
-    "Autarky ratio with storage (%)": sim_autarky_ratio, 
-    "PV sell revenue with storage (CHF)": sim_sellings_solar_chf,
-    "Cost Buying Electricity with storage(CHF)": sim_cost_buying_electricity_chf,
-    "Bill with storage (CHF)": sim_bill, 
+    "PV injection curtailment (%)": pv_injection_curtailment_user_input,
+    "PV injection curtailment (kW)": pv_injection_curtailment_power,
+    "Use of SmartCharging": opt_to_use_smart_charging,
+    "Self-consumption ratio with storage (%)": self_consumption_ratio_with_storage,
+    "Autarky ratio with storage (%)": autarky_ratio_with_storage, 
+    "PV sell revenue with storage (CHF)": sellings_solar_storage_chf,
+    "Cost Buying Electricity with storage(CHF)": cost_buying_solar_storage_chf,
+    "Bill with storage (CHF)": bill_with_storage, 
     "Gain of storage (CHF)": gain_of_storage, 
     "Total gain of solar and storage (CHF)": total_gain_of_solar_and_storage, 
-    "Throughput Energy (kWh)": batt_throughput_energy,
+    "Grid consumption (kWh)":grid_consumption_kWh_with_storage,
+    "Grid injection (kWh)":grid_injection_kWh_with_storage,
+    "Battery throughput Energy (kWh)": batt_throughput_energy,
     "Number of equivalent 80% DOD cycles": equivalent_80percent_cycles,
     "Battery total price (CHF)": batt_total_cost,
     "Battery variable price (CHF/kWh)": kWh_cost,
     "Cost of storage over 15 years (ct/kWh)": cost_of_stored_kWh_over_15_years*100.0,
     "Peak grid consumption with batt (kW)": peak_grid_consumption_with_batteries,
+    "Lost energy due to curtailment (kWh)" : curtailment_lost_energy_kWh,
     "Reference grid injection (kWh)": reference_grid_injection_kWh,
     "Reference grid consumption (kWh)": reference_grid_consumption_kWh,
+    "Reference total bill (CHF)": bill_with_solar_only,
     "Reference self-consumption (%)":reference_self_consumption_ratio, 
-    "Reference autarky (%)": reference_autarky_ratio
+    "Reference autarky (%)": reference_autarky_ratio,
+    "Reference lost energy due to curtailment (kWh)" : reference_curtailment_lost_energy_kwh,
+    "Reference peak grid consumption (kW)": peak_grid_consumption_with_solar,
+
     })
 
 
@@ -861,12 +874,12 @@ col5.metric("Bill", f"{bill_with_solar_only :.0f}" + "CHF")
 
 st.write("📋 **Results of simulation with solar and storage 🔋** ")
 col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Grid consumption", str(int(sim_grid_consumption))+" kWh", f"{(sim_grid_consumption-reference_grid_consumption_kWh)/reference_grid_consumption_kWh*100 :.1f}" + "%", delta_color="off")
-col2.metric("Grid-feeding", str(int(sim_grid_injection_kWh))+" kWh", f"{(sim_grid_injection_kWh-reference_grid_injection_kWh)/reference_grid_injection_kWh*100 :.1f}" + "%", delta_color="off")
-col3.metric("Self-consumption", f"{sim_self_consumption_ratio :.1f}"+"%", f"{(sim_self_consumption_ratio-reference_self_consumption_ratio) :.1f}" + "%" )
-#col3.metric("Self-consumption", f"{(sim_self_consumption_ratio) :.1f, }"+"%", f"{(sim_self_consumption_ratio-reference_self_consumption_ratio) :.1f}"+"%")
-col4.metric("Autarky", f"{(sim_autarky_ratio) :.1f}" + "%", f"{(sim_autarky_ratio-reference_autarky_ratio) :.1f}"+"%")
-col5.metric("Bill", f" {sim_bill :.0f}"+"CHF", f" { sim_bill-bill_with_solar_only :.0f}"+"CHF", delta_color="off" )
+col1.metric("Grid consumption", str(int(grid_consumption_kWh_with_storage))+" kWh", f"{(grid_consumption_kWh_with_storage-reference_grid_consumption_kWh)/reference_grid_consumption_kWh*100 :.1f}" + "%", delta_color="off")
+col2.metric("Grid-feeding", str(int(grid_injection_kWh_with_storage))+" kWh", f"{(grid_injection_kWh_with_storage-reference_grid_injection_kWh)/reference_grid_injection_kWh*100 :.1f}" + "%", delta_color="off")
+col3.metric("Self-consumption", f"{self_consumption_ratio_with_storage :.1f}"+"%", f"{(self_consumption_ratio_with_storage-reference_self_consumption_ratio) :.1f}" + "%" )
+#col3.metric("Self-consumption", f"{(self_consumption_ratio_with_storage) :.1f, }"+"%", f"{(self_consumption_ratio_with_storage-reference_self_consumption_ratio) :.1f}"+"%")
+col4.metric("Autarky", f"{(autarky_ratio_with_storage) :.1f}" + "%", f"{(autarky_ratio_with_storage-reference_autarky_ratio) :.1f}"+"%")
+col5.metric("Bill", f" {bill_with_storage :.0f}"+"CHF", f" { bill_with_storage-bill_with_solar_only :.0f}"+"CHF", delta_color="off" )
 
     
 
@@ -878,14 +891,14 @@ if st.session_state.simulation_results_history:
     
     st.subheader("Simulations results display")
 
-        
+
     # --- Actions ---
     cols = st.columns(2)
     with cols[0]:
         #st.metric("Valeur actuelle (kWh)", f"{battery_size_kwh_usr_input:.1f}")
         st.write("Swipe one settings at a time and choose what you want to display accordingly to perform sensitivity analysis. Advice: reset when you want to explore another input.")
-        list_of_channels_x = list(df_results.columns)[0:11]
-        list_of_channels_y = list(df_results.columns)[11:-1]    
+        list_of_channels_x = list(df_results.columns)[0:14]
+        list_of_channels_y = list(df_results.columns)[14:-1]    
     
         dataresults_x_axis = st.selectbox("Choose X axis:", list_of_channels_x, index=0)
         dataresults_y_axis = st.selectbox("Choose Y axis:", list_of_channels_y, index=5)
@@ -1045,6 +1058,34 @@ if opt_to_display_plots:
     )
     st.plotly_chart(fig_batt_profile)
 
+    # df_pow_profile["testpoint1"] = solar_system.test_profile
+    # df_pow_profile["testpoint2"] = solar_system.test2_profile
+    # df_pow_profile["testpoint3"] = solar_system.test3_profile
+    # df_pow_profile["testpoint4"] = solar_system.test4_profile
+
+    # # Energy Consumption Plot using Plotly
+    # fig_maxinject_profile = px.line(df_pow_profile, 
+    #                         x=df_pow_profile.index, 
+    #                         y=[ "testpoint1","testpoint2","testpoint3","testpoint4"], 
+    #                         title="  Powers for the max inject", 
+    #                         labels={"value": "testpoint [kW]", "variable": "Legend"}
+    # )
+
+
+    # # Move legend below the graph
+    # fig_maxinject_profile.update_layout(
+    #     legend=dict(
+    #         orientation="h",
+    #         yanchor="top",
+    #         y=-0.2,  # Position below the graph
+    #         xanchor="center",
+    #         x=0.1
+    #     )
+    # )
+    # st.plotly_chart(fig_maxinject_profile)
+
+
+
 
     #Plot the prices used:
     fig_levels = px.line(df_pow_profile, 
@@ -1078,8 +1119,7 @@ if opt_to_display_plots:
 
 
 
-
-
+    st.write(" \n ")
     st.write(" \n ")
 
 
@@ -1104,15 +1144,17 @@ if opt_to_display_plots:
     - The cost of grid electricity if there was no solar would have been {cost_buying_no_solar_chf:.2f} CHF , mean price is {cost_buying_no_solar_chf/consumption_kWh:.3f} CHF/kWh
     - The consumption of electricity on the grid for this period is {reference_grid_consumption_kWh:.2f} kWh with solar only
     - The cost of grid electricity is {cost_buying_solar_only_chf:.2f} CHF with solar only, mean price is {cost_buying_solar_only_chf/reference_grid_consumption_kWh:.3f} CHF/kWh
+    - The lost energy due to grid-feeding limitation is {reference_curtailment_lost_energy_kwh :.0f} kWh and curtailment level is {pv_injection_curtailment_power:.2f} kW
     - The sale of PV electricity is {sellings_solar_only_chf:.2f} CHF with solar only, mean price is {sellings_solar_only_chf/reference_grid_injection_kWh:.3f} CHF/kWh
     - The total bill is {bill_with_solar_only:.2f} CHF with solar only, a gain of {cost_buying_no_solar_chf-bill_with_solar_only:.1f} CHF due to solar""")
 
 
     st.markdown(f""" ***🔋 With storage***
-    - The consumption of electricity on the grid for this period is {consumption_kWh_with_storage:.2f} kWh with storage
+    - The consumption of electricity on the grid for this period is {grid_consumption_kWh_with_storage:.2f} kWh with storage
+    - The energy lost due to grid feeding limitation is {curtailment_lost_energy_kWh :.0f} kWh
     - The value of the stored energy left in the battery with mean price is {storage_value:.2f} CHF
-    - The cost of grid electricity is {cost_buying_solar_storage_chf:.2f} CHF with storage, mean price is {cost_buying_solar_storage_chf/consumption_kWh_with_storage:.3f} CHF/kWh
-    - The sale of PV electricity is {sellings_solar_storage_chf:.2f} CHF with solar only, mean price is {sellings_solar_storage_chf/injection_kWh_with_storage:.3f} CHF/kWh
+    - The cost of grid electricity is {cost_buying_solar_storage_chf:.2f} CHF with storage, mean price is {cost_buying_solar_storage_chf/grid_consumption_kWh_with_storage:.3f} CHF/kWh
+    - The sale of PV electricity is {sellings_solar_storage_chf:.2f} CHF with solar only, mean price is {sellings_solar_storage_chf/grid_injection_kWh_with_storage:.3f} CHF/kWh
     - The total bill is {bill_with_storage:.2f} CHF with solar + storage, a gain of {bill_with_solar_only - bill_with_storage :.1f} CHF due to storage
     - **TOTAL gain** with solar + storage is {cost_buying_no_solar_chf - bill_with_storage :.2f} CHF """)
 
@@ -1165,23 +1207,6 @@ if opt_to_display_peak:
 
 
     st.write("📋 **Reference without storage, ☀️ only**")
-
-
-    # peak_power_of_consumption = df_pow_profile["Consumption [kW]"].max()
-    # peak_power_of_production = df_pow_profile["Solar power [kW]"].max()
-
-
-    # peak_grid_consumption_with_solar = df_pow_profile["grid consumption reference"].max()
-    # peak_grid_injection_with_solar = df_pow_profile["grid consumption reference"].min()
-
-    # peak_grid_consumption_with_batteries = df_pow_profile["Consumption [kW]"].max()
-    # peak_grid_injection_with_batteries = df_pow_profile["grid consumption reference"].min()
-
-    # print(peak_power_of_consumption)
-    # print(peak_power_of_production)
-    # print(peak_grid_consumption_with_solar)
-    # print(peak_grid_injection_with_solar)
-
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Consumption peak", f"{peak_power_of_consumption :.1f}" + " kW")

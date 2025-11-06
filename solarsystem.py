@@ -1,6 +1,6 @@
 #solarsystem.py
 #representation of a solar system with storage
-#posibility to update the model and simulate it with methods
+#possibility to update the model with data and simulate it with methods
 #Moix P-O
 #Albedo Engineering 
 #MIT license
@@ -8,6 +8,7 @@
 #last modif 6 august 2024
 #last modif 7 april 2025
 #last modif 5 sept 2025
+#last modif 5 nov 2025
 
 
 import pandas as pd
@@ -49,14 +50,14 @@ class SolarSystem:
     #inverter
     inverter_model="next3"          #name of the device
     max_inverter_power = 15.0       #kW   15 by default for the nx3, to be updated if another model
-    max_grid_injection_power = max_inverter_power
+    max_grid_injection_power = 15.0 #kW   15 by default for the nx3, to be updated if another model
     
     #the battery and inverter system itself has a consumption of 50W / 0.05kW
     selfpowerconsumption = 0.05
 
 
     #the grid
-    peak_shaving_limit = max_inverter_power #in kW the maximum power taken from the grid, above is compensated if there is energy in the battery. TODO
+    peak_shaving_limit = 2*max_inverter_power #in kW the maximum power taken from the grid, above is compensated if there is energy in the battery. TODO
     peak_shaving_activated = False
 
     #properties in operation:
@@ -111,7 +112,7 @@ class SolarSystem:
     max_injection_power_profile = np.ones(len(time_steps))*(-max_grid_injection_power) #for an direct control with power setpoint for the max injection power, warning, it is an negative number 
     grid_setpoint_profile = np.zeros(len(time_steps))
 
-    lostproduction = np.zeros(len(time_steps))
+    lostproduction_profile = np.zeros(len(time_steps))
 
     #result of simulation: kept in a property of the object for later display, initialized at 0
     net_power_balance_profile = np.zeros(len(time_steps))  # solar-load
@@ -122,6 +123,10 @@ class SolarSystem:
     available_power_for_peak_recovery_profile = np.zeros(len(time_steps))  # power available to recover of peak shaving
 
     test_profile = np.zeros(len(time_steps))  # for debug
+    test2_profile = np.zeros(len(time_steps))  # for debug
+    test3_profile = np.zeros(len(time_steps))  # for debug
+    test4_profile = np.zeros(len(time_steps))  # for debug
+
 
     def __init__(self, owner_name, adress):
         #give only minimal information of the system for creating it: owner and adress
@@ -262,7 +267,7 @@ class SolarSystem:
          '''
         
          #battery simulation: profiles initialisation with the same lenght of array 
-         self.net_grid_balance_profile = self.load_power_profile-self.solar_power_profile
+         self.net_grid_balance_profile = self.load_power_profile - self.solar_power_profile
          self.net_power_balance_profile = self.load_power_profile - self.solar_power_profile
 
          self.peak_shaving_profile = self.net_power_balance_profile - self.peak_shaving_limit 
@@ -279,7 +284,7 @@ class SolarSystem:
          self.clamped_batt_pow_profile = np.zeros(len(self.load_power_profile)) #that is an internal array with the  charging power computed during the simulation
          self.delta_p_on_ac_source_profile = np.zeros(len(self.load_power_profile)) #for an direct control with power setpoint, per example to discharge the battery.
          self.max_injection_power_profile = np.ones(len(self.load_power_profile))*(-self.max_grid_injection_power) #for an direct control of max injected power
-         self.lostproduction = np.zeros(len(self.load_power_profile)) 
+         self.lostproduction_profile = np.zeros(len(self.load_power_profile)) 
 
          #update of the SOC for backup used if it changed, 
          if not self.peak_shaving_activated: 
@@ -295,6 +300,8 @@ class SolarSystem:
          
          self.test_profile = np.zeros(len(self.time_steps))  # for debug
          self.test2_profile = np.zeros(len(self.time_steps))  # for debug
+         self.test3_profile = np.zeros(len(self.time_steps))  # for debug
+         self.test4_profile = np.zeros(len(self.time_steps))  # for debug
 
 
 
@@ -314,7 +321,7 @@ class SolarSystem:
          k = 0
          for pow in self.net_grid_balance_profile:
              if pow < self.max_injection_power_profile[k]:
-                 self.lostproduction[k] = self.max_injection_power_profile[k]-pow
+                 self.lostproduction_profile[k] = self.max_injection_power_profile[k]-pow
                  self.net_grid_balance_profile[k] = self.max_injection_power_profile[k]
                  
              if pow < 0:
@@ -332,7 +339,7 @@ class SolarSystem:
             print("The energy consumed is " + str(sum(self.load_power_profile) * self.sim_step) + " kWh")
             print("The energy taken from the grid is " + str(sum(net_power_balance_pos) * self.sim_step) + " kWh")
             print("The energy sold to the grid is " + str(sum(net_power_balance_neg) * self.sim_step) + " kWh")
-            print("The energy lost due to production limitation is " + str(sum(self.lostproduction) * self.sim_step) + " kWh")
+            print("The energy lost due to production limitation is " + str(sum(self.lostproduction_profile) * self.sim_step) + " kWh")
 
             print("The peak power taken on the grid is " + str(max(self.net_grid_balance_profile) ) + " kW")
 
@@ -351,7 +358,7 @@ class SolarSystem:
          axes_pow.plot(self.time_steps  , self.net_grid_balance_profile, 'b-')
          axes_pow.plot(self.time_steps  , self.max_injection_power_profile, 'm:')
          axes_pow.plot(self.time_steps  , self.net_grid_balance_unlimited_profile, 'b:')
-         #axes_pow.plot(self.time_steps  , self.lostproduction, 'c')
+         #axes_pow.plot(self.time_steps  , self.lostproduction_profile, 'c')
 
 
 
@@ -387,7 +394,7 @@ class SolarSystem:
          self.net_power_balance_profile_with_ac_setpoint = self.net_power_balance_profile - self.grid_setpoint_profile    
 
          #reset some variable to be sure it is not affected by a previous simulation:
-         self.lostproduction = np.zeros(len(self.load_power_profile)) 
+         self.lostproduction_profile = np.zeros(len(self.load_power_profile)) 
          grid_pos_profile = np.zeros(len(self.load_power_profile))
          grid_neg_profile = np.zeros(len(self.load_power_profile))
          
@@ -422,7 +429,8 @@ class SolarSystem:
              k = k + 1
             
         
-        
+         #self.test_profile = net_power_balance_neg.copy()
+    
          #HERE ADD THE SIMULATION OF THE NEXT3 its default behaviour/energy management     
          #conditions:
          #   -is there enough space for energy in the battery to charge (without considering limited end of charge current given by the bms)
@@ -497,9 +505,15 @@ class SolarSystem:
                                         disch_power_limited_by_e_for_peak_shaving)
 
              possible_p_discharge_for_selfconsumption = max((min_energy_in_batt_for_selfconsumption-self.energy_in_batt_profile[k])*self.efficiency_batt_one_way/self.sim_step,
-                                     -net_power_balance_with_ac_setpoint_pos[k],
+                                     -net_power_balance_with_ac_setpoint_pos[k], #ICI123
                                      self.battery_max_discharge_setpoint_profile[k],
-                                     self.max_injection_power_profile[k]-net_power_balance_neg[k])
+                                     self.max_injection_power_profile[k]-net_power_balance_pos[k])  #ICI123
+             
+             self.test_profile[k] = (min_energy_in_batt_for_selfconsumption-self.energy_in_batt_profile[k])*self.efficiency_batt_one_way/self.sim_step
+             self.test2_profile[k] = -net_power_balance_with_ac_setpoint_pos[k]
+             self.test3_profile[k] = self.battery_max_discharge_setpoint_profile[k]
+             self.test4_profile[k] = self.max_injection_power_profile[k]-net_power_balance_pos[k]
+
              #mary_the_two_goals: 
              possible_p_discharge = min(possible_p_discharge_for_peak_shaving,
                                         possible_p_discharge_for_selfconsumption)
@@ -511,8 +525,6 @@ class SolarSystem:
                  if possible_p_charge_for_peak_recovery > batt_pow:
                      batt_pow = possible_p_charge_for_peak_recovery
 
-             self.test_profile[k] = batt_pow
-             self.test2_profile[k] = possible_p_charge
 
              #print(np.clip( batt_pow, possible_p_discharge, possible_p_charge) ) # test
 
@@ -538,7 +550,7 @@ class SolarSystem:
              #but this is limited by the max injection current:
              if self.net_grid_balance_profile[k] < self.max_injection_power_profile[k]:
                  #production limitation:
-                 self.lostproduction[k] = self.max_injection_power_profile[k]-self.net_grid_balance_profile[k]
+                 self.lostproduction_profile[k] = self.max_injection_power_profile[k]-self.net_grid_balance_profile[k]
                  self.net_grid_balance_profile[k] = self.max_injection_power_profile[k]
                      
              #separate the positive power on the grid (buy energy) and the negative power (solar excess injection to the grid)
@@ -580,7 +592,7 @@ class SolarSystem:
             print("The energy taken from the grid is " + str(e_grid_consumption) + " kWh")
             print("The energy injected back to the grid is " + str(e_grid_injection) + " kWh")
             print("The peak power taken on the grid is " + str(max(self.net_grid_balance_profile) ) + " kW")
-            print("The energy lost due to production limitation is " + str(sum(self.lostproduction) * self.sim_step) + " kWh")
+            print("The energy lost due to production limitation is " + str(sum(self.lostproduction_profile) * self.sim_step) + " kWh")
 
             print("The AUTARKY rate is " + str(autarky_rate) + "%")
 
@@ -608,7 +620,7 @@ class SolarSystem:
          
          #axes_sys_pow.plot(self.time_steps  , self.net_power_balance_profile_with_ac_setpoint, 'c:')
          axes_sys_pow.plot(self.time_steps  , self.net_power_balance_profile_unlimited_profile, 'b:')
-         axes_sys_pow.plot(self.time_steps  , self.lostproduction, 'c')
+         axes_sys_pow.plot(self.time_steps  , self.lostproduction_profile, 'c')
 
          
          axes_sys_pow.set_ylabel('Power activ [kW]', fontsize=12)
@@ -737,7 +749,7 @@ class SolarSystem:
          
          #axes_sys_pow.plot(self.time_steps  , self.net_power_balance_profile_with_ac_setpoint, 'c:')
          axes_sys_pow.plot(self.time_steps  , self.net_power_balance_profile_unlimited_profile, 'b:')
-         axes_sys_pow.plot(self.time_steps  , self.lostproduction, 'c')
+         axes_sys_pow.plot(self.time_steps  , self.lostproduction_profile, 'c')
 
          
          axes_sys_pow.set_ylabel('Power activ [kW]', fontsize=12)
