@@ -10,11 +10,14 @@ The user can:
 - Reset the history with a **Reset** button.
 - And even make nice **interactive 3D plots**
 
+ &nbsp;&nbsp;&nbsp;&nbsp;  [![Video thumbnail](thumbnail.png)](rotation_plot.mp4)
 
-<video width="600" controls>
+<!-- <video width="600" controls>
   <source src="rotation_plot.mp4" type="video/mp4">
   Your browser does not support the video tag.
-</video>
+</video> -->
+
+
 
 ## 🚀 Deployement
 This can be directly used here: https://batterysizer.streamlit.app/
