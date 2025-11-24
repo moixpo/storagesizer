@@ -12,7 +12,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import datetime
-import math
+#import math
+import imageio
+import os
 
 #import random as rnd
 
@@ -1508,11 +1510,11 @@ if opt_to_display_3D:
                 - self-sufficiency rate ( also called autarky rate)
                 - the final bill (ex fixed fees) and the gain compared to the case without storage (the point with 0 solar and 0 battery) """)
                 
-    st.write("Note that the smart charging is not applied here ")
+    st.write("Note that you must not use the smart charging option here, the result will not be smart as it is not computed for each case")
              
 
     battery_range = np.arange(0, 55, 5) #np.arange(0, 55, 5)   # 11 values
-    solar_range   = np.arange(0, 110, 10) # 11 values
+    solar_range   = np.arange(0, 160, 10) # 11 values
 
     # response_surface should be (len(solar_range), len(battery_range))
     selfconsumption_surface = np.zeros((len(solar_range), len(battery_range)))
@@ -1714,6 +1716,50 @@ if opt_to_display_3D:
     # Display in Streamlit
     st.plotly_chart(fig_bill)
 
+
+
+    if False:
+        # video avec fig_go 
+        fig = fig_go
+
+        # --- dossier temporaire ---
+        os.makedirs("frames", exist_ok=True)
+
+        # --- paramètres ---
+        n_frames = 300    # 3 secondes à 30 fps
+        fps = 30
+        resolution_scale = 2  # 1=normal, 2=HD, 3=Ultra-HD
+        radius = 2.5     # distance de la caméra
+        elev = 1.2       # hauteur
+
+        for i in range(n_frames):
+            angle = 2 * np.pi * i / n_frames
+            camera = dict(
+                eye=dict(
+                    x=radius * np.cos(angle),
+                    y=radius * np.sin(angle),
+                    z=elev
+                )
+            )
+            fig.update_layout(scene_camera=camera)
+
+            #fig.write_image(f"frames/frame_{i:03d}.png")  # nécessite kaleido
+
+            fig.write_image(
+                f"frames/frame_{i:03d}.png",
+                scale=resolution_scale,     # haute résolution ici
+                width=1000,                 # tu peux augmenter
+                height=800                 # idem
+            )
+            print(f"creation image {i}")
+
+        # --- créer la vidéo mp4 ---
+        with imageio.get_writer("rotation_plot.mp4", fps=fps) as video:
+            for i in range(n_frames):
+                frame = imageio.imread(f"frames/frame_{i:03d}.png")
+                video.append_data(frame)
+
+        print("🎉 Vidéo créée : rotation_plot.mp4")
 
 
 # #**********************************
