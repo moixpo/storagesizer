@@ -9,6 +9,7 @@
 #last modif 7 april 2025
 #last modif 5 sept 2025
 #last modif 5 nov 2025
+#last modif 23 nov 2025
 
 
 import pandas as pd
@@ -127,6 +128,19 @@ class SolarSystem:
     test3_profile = np.zeros(len(time_steps))  # for debug
     test4_profile = np.zeros(len(time_steps))  # for debug
 
+    #output indicators:
+    autarky_rate = 0.0
+    selfconsumption_rate = 0.0
+
+    e_solar = 0.0
+    e_load = 0.0
+    e_grid_consumption = 0.0
+    e_grid_injection = 0.0
+    e_curtailment_lost_energy_kwh = 0.0
+
+
+
+
 
     def __init__(self, owner_name, adress):
         #give only minimal information of the system for creating it: owner and adress
@@ -214,7 +228,7 @@ class SolarSystem:
             self.sim_step = timestep
             self.time_steps  = np.array(range(0,len(self.load_power_profile)))*timestep  #in hours
 
-            self.update_internal_profile_lenght()
+            self.update_internal_profile_length()
 
             #print(self.load_power_profile)
             print("\n Data are loaded from csv\n")
@@ -244,14 +258,13 @@ class SolarSystem:
          self.sim_step = timestep
          self.time_steps  = np.array(range(0,len(self.load_power_profile)))*timestep  #in hours
 
-         self.update_internal_profile_lenght()
+         self.update_internal_profile_length()
          
-         #print(self.load_power_profile)
-         print("\n Data are updated, ready for simulation \n")
+         #print("\n Data are updated, ready for simulation \n")
 
 
 
-    def update_internal_profile_lenght(self):
+    def update_internal_profile_length(self):
          '''
          it takes the load profile and reinitialise the other internal profiles 
          to the correct length for the simulation
@@ -269,6 +282,13 @@ class SolarSystem:
          #battery simulation: profiles initialisation with the same lenght of array 
          self.net_grid_balance_profile = self.load_power_profile - self.solar_power_profile
          self.net_power_balance_profile = self.load_power_profile - self.solar_power_profile
+
+
+         self.net_power_balance_neg = np.zeros(len(self.load_power_profile))
+         self.net_power_balance_pos = np.zeros(len(self.load_power_profile))
+         self.grid_pos_profile = np.zeros(len(self.load_power_profile))
+         self.grid_neg_profile = np.zeros(len(self.load_power_profile))
+
 
          self.peak_shaving_profile = self.net_power_balance_profile - self.peak_shaving_limit 
          self.available_power_for_peak_recovery_profile = -self.peak_shaving_profile  #take what's under the limit in positive
@@ -305,9 +325,52 @@ class SolarSystem:
 
 
 
+         #compute the sums over the day:
+         self.e_solar = sum(self.solar_power_profile) * self.sim_step
+         self.e_load = sum(self.load_power_profile) * self.sim_step
+
 
     #*************************************************
     #simulation methods: without (simple) or with storage 
+
+    def compute_energies_sum_and_indicators(self, print_res=True):
+
+        
+        #compute the sums over the day:
+        self.e_solar = sum(self.solar_power_profile) * self.sim_step
+        self.e_load = sum(self.load_power_profile) * self.sim_step
+        self.e_grid_consumption = sum(self.grid_pos_profile) * self.sim_step
+        self.e_grid_injection = -sum(self.grid_neg_profile) * self.sim_step
+        self.e_curtailment_lost_energy_kwh = sum(self.lostproduction_profile)* self.sim_step
+
+        if self.e_load > 0:
+            self.autarky_rate = (self.e_load-self.e_grid_consumption) / self.e_load * 100
+        else:
+            self.autarky_rate = 0
+
+
+        if self.e_solar >0: 
+             self.selfconsumption_rate = (self.e_solar-self.e_grid_injection-self.e_curtailment_lost_energy_kwh) / self.e_solar * 100
+        else :
+            self.selfconsumption_rate = 100.0
+
+        if print_res:  #used to avoid plenty of terminal print
+
+            print("The solar energy produced is " + str(self.e_solar) + " kWh")
+            print("The energy consumed is " + str(self.e_load) + " kWh")
+
+            #TODO: change
+            print("The energy taken from the grid is " + str(sum(self.grid_pos_profile) * self.sim_step) + " kWh")
+            print("The energy sold to the grid is " + str(sum(self.grid_neg_profile) * self.sim_step) + " kWh")
+            print("The energy lost due to production limitation is " + str(sum(self.lostproduction_profile) * self.sim_step) + " kWh")
+
+            print("The peak power taken on the grid is " + str(max(self.net_grid_balance_profile) ) + " kW")
+            print("The AUTARKY rate is " + str(self.autarky_rate) + "%")
+            print("The SELFCONSUMPTION rate is " + str(self.selfconsumption_rate) + "%")
+
+
+        return None
+
          
     def run_simple_simulation(self, print_res=True):
          #let's consider just the power balance, everything in AC, without storage, that will be for later...
@@ -316,6 +379,8 @@ class SolarSystem:
          
          net_power_balance_neg = np.zeros(len(self.net_grid_balance_profile))
          net_power_balance_pos = np.zeros(len(self.net_grid_balance_profile))
+
+
 
          #check the maximal grid injection:
          k = 0
@@ -330,19 +395,19 @@ class SolarSystem:
                 net_power_balance_pos[k] = self.net_grid_balance_profile[k]
 
              k = k+1
-                 
+
+        #and save in the object:
+         self.net_power_balance_neg = net_power_balance_neg
+         self.net_power_balance_pos = net_power_balance_pos
+         self.grid_pos_profile = net_power_balance_pos
+         self.grid_neg_profile = net_power_balance_neg
 
 
          if print_res:  #used to avoid plenty of terminal print
             print("\n*************\nSimulation without storage: ")
-            print("The solar energy produced is " + str(sum(self.solar_power_profile) * self.sim_step) + " kWh")
-            print("The energy consumed is " + str(sum(self.load_power_profile) * self.sim_step) + " kWh")
-            print("The energy taken from the grid is " + str(sum(net_power_balance_pos) * self.sim_step) + " kWh")
-            print("The energy sold to the grid is " + str(sum(net_power_balance_neg) * self.sim_step) + " kWh")
-            print("The energy lost due to production limitation is " + str(sum(self.lostproduction_profile) * self.sim_step) + " kWh")
-
-            print("The peak power taken on the grid is " + str(max(self.net_grid_balance_profile) ) + " kW")
-
+        
+         #print("\n*************\nSimulation without storage: ") #TODO comment
+         self.compute_energies_sum_and_indicators(print_res=False)
 
     def display_simple_simulation(self):
          '''       
@@ -395,8 +460,8 @@ class SolarSystem:
 
          #reset some variable to be sure it is not affected by a previous simulation:
          self.lostproduction_profile = np.zeros(len(self.load_power_profile)) 
-         grid_pos_profile = np.zeros(len(self.load_power_profile))
-         grid_neg_profile = np.zeros(len(self.load_power_profile))
+         self.grid_pos_profile = np.zeros(len(self.load_power_profile))
+         self.grid_neg_profile = np.zeros(len(self.load_power_profile))
          
 
 
@@ -555,9 +620,9 @@ class SolarSystem:
                      
              #separate the positive power on the grid (buy energy) and the negative power (solar excess injection to the grid)
              if self.net_grid_balance_profile[k] > 0:
-                 grid_pos_profile[k] = self.net_grid_balance_profile[k]
+                 self.grid_pos_profile[k] = self.net_grid_balance_profile[k]
              else:
-                 grid_neg_profile[k] = self.net_grid_balance_profile[k]
+                 self.grid_neg_profile[k] = self.net_grid_balance_profile[k]
                         
                    
                     
@@ -573,20 +638,22 @@ class SolarSystem:
         
 
          #compute the sums over the day:
-             
          e_solar = sum(self.solar_power_profile) * self.sim_step
          e_load = sum(self.load_power_profile) * self.sim_step
-         e_grid_consumption = sum(grid_pos_profile) * self.sim_step
-         e_grid_injection = sum(grid_neg_profile) * self.sim_step
+         e_grid_consumption = sum(self.grid_pos_profile) * self.sim_step
+         e_grid_injection = sum(self.grid_neg_profile) * self.sim_step
 
          if e_load > 0:
-             autarky_rate = (e_load-e_grid_consumption) / e_load * 100
+             self.autarky_rate = (e_load-e_grid_consumption) / e_load * 100
          else:
-             autarky_rate = 0
+             self.autarky_rate = 0
              
+         #print("\n*************\nSimulation WITH storage: ") #TODO comment
+         self.compute_energies_sum_and_indicators(print_res)
 
          if print_res:  #used to avoid plenty of terminal print
             print("\n*************\nSimulation with storage: ")
+
             print("The solar energy produced is " + str(e_solar) + " kWh")
             print("The energy consumed is " + str(e_load) + " kWh")
             print("The energy taken from the grid is " + str(e_grid_consumption) + " kWh")
@@ -594,7 +661,7 @@ class SolarSystem:
             print("The peak power taken on the grid is " + str(max(self.net_grid_balance_profile) ) + " kW")
             print("The energy lost due to production limitation is " + str(sum(self.lostproduction_profile) * self.sim_step) + " kWh")
 
-            print("The AUTARKY rate is " + str(autarky_rate) + "%")
+            print("The AUTARKY rate is " + str(self.autarky_rate) + "%")
 
 
 

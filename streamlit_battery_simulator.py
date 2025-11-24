@@ -9,8 +9,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import datetime
+import math
+
 #import random as rnd
 
 #home made import:
@@ -18,6 +21,7 @@ import datetime
 #from meteo_access_functions import *
 from solarsystem import *
 from advanced_figures import *
+#import project_constants
 
 #constants TODO: put them as variable in the menu
 INVERTER_STANDBY_W = 50  #Watts
@@ -42,7 +46,7 @@ if "simulation_results_history" not in st.session_state:
 # SIDEBAR
 ### Create sidebar with the options for simulation
 with st.sidebar:
-
+    
     st.title("⚙️ Simulation Settings ")
 
     st.write("🔋 Storage used for simulation")
@@ -192,7 +196,7 @@ with st.sidebar:
 
 
     st.markdown("---")
-    st.write("Battery sizer, version 0.6")
+    st.write("Battery sizer, version 0.7")
     st.write("✌️ Moix P-O, 2025")
     st.write("Streamlit for interactive dashboards...")
     
@@ -336,8 +340,6 @@ solar_system.soc_for_peak_shaving_user = batt_soc_for_peak_user_input
 solar_system.peak_shaving_activated = opt_to_use_peak_shaving
 solar_system.max_grid_injection_power = pv_injection_curtailment_power #kW  a high value in order not to have caping 
 
-
-#For TEST, warning, TODO
 solar_system.peak_shaving_limit = clipping_level #kW
 
 solar_system.max_power_charge = battery_charge_power_kw #to update the max charge used by default independently of the battery size
@@ -386,9 +388,11 @@ scaled_production_kWh = df_pow_profile["Solar power scaled"].sum()/4.0 #scaled a
 reference_grid_injection_kWh = -df_pow_profile["grid injection reference"].sum()/4.0
 reference_grid_consumption_kWh = df_pow_profile["grid consumption reference"].sum()/4.0
 
-reference_self_consumption_ratio = (scaled_production_kWh - reference_grid_injection_kWh - reference_curtailment_lost_energy_kwh) / scaled_production_kWh * 100
-reference_autarky_ratio = (consumption_kWh - reference_grid_consumption_kWh) / consumption_kWh * 100.0  
-
+# reference_self_consumption_ratio = (scaled_production_kWh - reference_grid_injection_kWh - reference_curtailment_lost_energy_kwh) / scaled_production_kWh * 100
+# reference_autarky_ratio = (consumption_kWh - reference_grid_consumption_kWh) / consumption_kWh * 100.0  
+# print(" Check: " , reference_autarky_ratio, solar_system.autarky_rate)
+reference_self_consumption_ratio= solar_system.selfconsumption_rate
+reference_autarky_ratio = solar_system.autarky_rate
 
 
 # compute the costs based on the selected price for the consumption only, it must be done for every quarters because 
@@ -780,9 +784,12 @@ minimal_backup_time = df_pow_profile["Time of backup on battery"].min()
 #*********************
 # Analyse the results
 
-self_consumption_ratio_with_storage = (scaled_production_kWh-grid_injection_kWh_with_storage-curtailment_lost_energy_kWh) / scaled_production_kWh * 100
-autarky_ratio_with_storage = (consumption_kWh-grid_consumption_kWh_with_storage) / consumption_kWh * 100.0  
-
+#self_consumption_ratio_with_storage = (scaled_production_kWh-grid_injection_kWh_with_storage-curtailment_lost_energy_kWh) / scaled_production_kWh * 100
+#print(" Check selfconsumption: " , self_consumption_ratio_with_storage, solar_system.selfconsumption_rate)
+self_consumption_ratio_with_storage = solar_system.selfconsumption_rate
+#autarky_ratio_with_storage = (consumption_kWh-grid_consumption_kWh_with_storage) / consumption_kWh * 100.0  
+#print(" Check: " , autarky_ratio_with_storage, solar_system.autarky_rate)
+autarky_ratio_with_storage = solar_system.autarky_rate
 
 
 #save hours sampling for heatmap display:
@@ -1486,6 +1493,226 @@ if opt_to_display_bkup:
 
     st.write("This indicate for every moment how much time could be spend on the battery only with the coming load and the SOC at that precise time. This is not the possible islanding time as the solar production is not taken into account, this is for an future graph. The goal here is to have an idea of the reserve independently of the enventual solar")
 
+
+
+#**********************************
+st.markdown("---")
+st.subheader(" 3D Analysis of self-consumption and self-sufficiency")
+#**********************************
+opt_to_display_3D = st.checkbox("Show this part with 3D plots, there is more than 100 simulations of the model and that takes time")
+
+if opt_to_display_3D:
+    st.markdown("Above all the parameters are left to be tuned by the user to explore manually the effect of each setting. Here the size of the battery and the size of the solar are swiped to directly display a response surface of: ")
+    st.markdown("""
+                - self-consumption rate
+                - self-sufficiency rate ( also called autarky rate)
+                - the final bill (ex fixed fees) and the gain compared to the case without storage (the point with 0 solar and 0 battery) """)
+                
+    st.write("Note that the smart charging is not applied here ")
+             
+
+    battery_range = np.arange(0, 55, 5) #np.arange(0, 55, 5)   # 11 values
+    solar_range   = np.arange(0, 110, 10) # 11 values
+
+    # response_surface should be (len(solar_range), len(battery_range))
+    selfconsumption_surface = np.zeros((len(solar_range), len(battery_range)))
+    autarky_surface = np.zeros((len(solar_range), len(battery_range)))
+    bill_surface= np.zeros((len(solar_range), len(battery_range)))
+
+
+    # --- Streamlit progress bar setup ---
+    total_iters = len(solar_range) * len(battery_range)
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    current_iter = 0
+
+
+    # Loop over indices and values
+    for row, sol in enumerate(solar_range):
+        #print("Solar swipe: ", sol) #to see the advance
+
+        for col, bat in enumerate(battery_range):
+
+            #run the simulation model for each case
+            #first update the internal attributes:
+            solar_system.batt_capacity_kWh = bat  # in kWh
+            battery_charge_power_kw = batt_charge_power_rate_user_input * bat
+            solar_array_all_scaled = solar_array_all * sol / 100.0
+
+            battery_charge_power_kw = batt_charge_power_rate_user_input * bat
+            solar_system.max_power_charge = battery_charge_power_kw #to update the max charge used by default independently of the battery size
+            solar_system.max_power_discharge = -battery_charge_power_kw #same rate applied
+
+            #for case without battery
+            if bat == 0.0:
+                solar_system.selfpowerconsumption = 0.0
+            else:
+                solar_system.selfpowerconsumption = INVERTER_STANDBY_W / 1000
+
+            #load data in the module for simulation:
+            
+            #no need to update everything, just the solar (the rest is updated above): 
+            #solar_system.solar_power_profile = np.array(solar_array_all_scaled) 
+
+            solar_system.load_data_for_simulation(pow_array_all, solar_array_all_scaled, timestep=0.25)
+            solar_system.run_storage_simulation(print_res=False)
+
+            #take the result:
+            autarky_surface[row, col]  = solar_system.autarky_rate
+            selfconsumption_surface[row, col]  = solar_system.selfconsumption_rate
+
+
+            #and compute the price with that power profile
+            cost_buying_elec_chf = (solar_system.grid_pos_profile * df_pow_profile["price buy"].values).sum()/4.0 
+            sellings_solar_chf = (-solar_system.grid_neg_profile * df_pow_profile["price sell PV"].values).sum()/4.0 
+
+
+            bill_with_storage = cost_buying_elec_chf - sellings_solar_chf  #TODO: add the peak energy+ bill_of_peak_with_storage
+            bill_surface[row, col] = bill_with_storage
+            #print("    ", solar_system.autarky_rate, solar_system.selfconsumption_rate)
+
+            # --- update progress bar ---
+            current_iter += 1
+            progress = current_iter / total_iters
+            progress_bar.progress(progress)
+            status_text.text(
+                f"Simulation {current_iter}/{total_iters} "
+                f"(PV scale = {sol} %, Battery = {bat} kWh)"
+            )
+
+    # Create meshgrid for 3D plot
+    A, B = np.meshgrid(battery_range, solar_range)
+
+    # # Plotting
+    # fig = plt.figure(figsize=(7,7))
+    # ax = fig.add_subplot(111, projection='3d')
+    # surf = ax.plot_surface(A, B, autarky_surface, 
+    #                        cmap="viridis")
+    # surf2 = ax.plot_surface(A, B, selfconsumption_surface, 
+    #                        cmap="plasma")
+    # #surf = ax.plot_surface(A, B, C2, cmap=cm.hot)
+
+    # ax.set_xlabel("Battery size [kWh]")
+    # ax.set_ylabel("Solar Scaling (%)")
+    # ax.set_zlabel("Self-consumption rate [%]")
+    # ax.set_title("Self-consumption in fonction of battery and solar ")
+    # st.pyplot(fig)
+
+
+
+
+
+    fig_go = go.Figure()
+    fig_go.add_trace(go.Surface( x=A, y=B, z=autarky_surface,
+        colorscale='Viridis',
+        name='Autarky',
+        colorbar=dict(title='Self-sufficiency [%]', y=0.55 ),
+        showscale=True,
+        opacity=1.0,
+        contours={
+        "x": {"show": True, "color": "black", "width": 1},
+        "y": {"show": True, "color": "black", "width": 1}
+        }  
+    ))
+
+    fig_go.add_trace(go.Surface(x=A, y=B, z=selfconsumption_surface,
+        colorscale='Plasma',
+        name='Selfconsumption',
+        colorbar=dict(title='Self-consumption [%]', x=1.1),  # move 2nd colorbar to avoid overlap
+        showscale=True,
+        opacity=0.95,
+        contours={
+        "x": {"show": True, "color": "black", "width": 1},
+        "y": {"show": True, "color": "black", "width": 1}
+        }        
+    ))
+
+    fig_go.update_layout(
+        title="Self-sufficiency and self-consumption in function of solar and battery size",
+        scene=dict(
+            xaxis_title='Battery [kWh]',
+            yaxis_title='Solar scaling [%]',
+            zaxis_title='Indicator [%]',
+            aspectmode='manual',
+            aspectratio=dict(x=1, y=1, z=1)
+        ),
+        width=600,
+        height=800
+    )
+
+    fig_go.update_traces(
+        lighting=dict(ambient=0.6, diffuse=0.8, roughness=0.5, specular=0.1),
+        lightposition=dict(x=100, y=200, z=0),
+        )
+
+
+    # Display in Streamlit
+    st.plotly_chart(fig_go)
+
+
+
+
+
+    # Créer un contour plot interactif
+    fig_contour_autarky = px.imshow(
+        autarky_surface,
+        x=battery_range,
+        y=solar_range,
+        color_continuous_scale="viridis",
+        labels=dict(x="Battery [kWh]", y="Solar scaling [%]", color="Indicator [%]"),
+        title = "Autarky rate",
+        aspect="auto"
+    )
+
+    # Afficher dans Streamlit
+    st.plotly_chart(fig_contour_autarky)
+
+    # Créer un contour plot interactif
+    fig_contour_selfcon = px.imshow(
+        selfconsumption_surface,
+        x=battery_range,
+        y=solar_range,
+        color_continuous_scale="plasma",
+        labels=dict(x="Battery [kWh]", y="Solar scaling [%]", color="Indicator [%]"),
+        title = "Self-consumption rate",
+        aspect="auto"
+    )
+
+    # Afficher dans Streamlit
+    st.plotly_chart(fig_contour_selfcon)
+
+
+
+
+    # Build interactive 3D surface plot for the bill
+    fig_bill = go.Figure()
+    fig_bill.add_trace(go.Surface(x=A, y=B, z=bill_surface,
+                                    colorscale='Turbo',
+                                    name='Bill',
+                                    colorbar=dict(title='Bill [CHF]', y=0.55 ),
+                                    showscale=True,
+                                    contours={
+                                        "x": {"show": True, "color": "black", "width": 1},
+                                        "y": {"show": True, "color": "black", "width": 1}
+                                    } 
+                                    )
+    )
+
+    fig_bill.update_layout(
+        title="Bill in function of solar and battery size",
+        scene=dict(
+            xaxis_title='Battery [kWh]',
+            yaxis_title='Solar scaling [%]',
+            zaxis_title='Bill [CHF]',
+            aspectmode='manual',   # allow manual control
+            aspectratio=dict(x=1, y=1, z=1)  # stretch y-axis relative to x
+        ),
+        width=800,
+        height=800
+    )
+
+    # Display in Streamlit
+    st.plotly_chart(fig_bill)
 
 
 
