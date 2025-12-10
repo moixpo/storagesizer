@@ -606,6 +606,17 @@ solar_system.battery_max_charge_setpoint_profile = full_day_max_charging_power_p
 df_pow_profile["Smart Charging"] = full_day_max_charging_power_profile_array #full_plim_array
 
 
+opt_to_use_optimal_discharging = False
+if opt_to_use_optimal_discharging:
+    print("TODO: smart discharging in function of the dynamic price that will say to the battery not to discharge")
+    #Here we will modify the     solar_system.battery_max_discharge_setpoint_profile  to limit the discharge at certain time.
+    #we cannot use a single day to assess it, but at least two days as the load is during the night.
+    #an moving window will assess the min state of charge, energy needed for the next 24 hours for every quarter and assess the battery needed and alocate it to the best time in function of the price.
+    
+
+
+
+
 
 #and run the simulation of the system with the loaded datas:
 solar_system.run_storage_simulation(print_res=False)
@@ -984,7 +995,8 @@ fig_soc_profile.update_layout(
 st.plotly_chart(fig_soc_profile)
 
 
-
+fig_polar_indicators = build_daily_indicators_polar_fraction_figure(day_kwh_df)
+st.pyplot(fig_polar_indicators)
 
 
 
