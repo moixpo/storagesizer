@@ -172,14 +172,14 @@ def build_production_heatmap_figure(hours_mean_df):
 def build_consumption_heatmap_figure(hours_mean_df):
     
     all_channels_labels = list(hours_mean_df.columns)
-    channel_number_SOC = [i for i, elem in enumerate(all_channels_labels) if ('Consumption [kW]' in elem) ]
+    channel_number = [i for i, elem in enumerate(all_channels_labels) if ('Consumption [kW]' in elem) ]
         
     #print(all_channels_labels)
     #print(channel_number_SOC)
 
     # Resample the data to hourly intervals and aggregate using the mean or sum
     #hourly_data = data.resample('H').mean()  # or data.resample('H').sum()
-    energies_by_hours = hours_mean_df[all_channels_labels[channel_number_SOC[0]]]
+    energies_by_hours = hours_mean_df[all_channels_labels[channel_number[0]]]
 
     # Extract the values from the dataframe
     consumption_data = energies_by_hours.values
@@ -630,23 +630,19 @@ def build_daily_indicators_polar_fraction_figure(day_kwh_df):
     # the channels with SYSTEM Power 
     
     channels_number_Psolar_Tot = [i for i, elem in enumerate(all_channels_labels) if 'Solar power scaled' in elem]
-    #channel_number_Pin_actif_Tot = [i for i, elem in enumerate(all_channels_labels) if "Pin power (ALL)" in elem]
-    
+    channel_number_Pload_Consumption = [i for i, elem in enumerate(all_channels_labels) if ('Consumption [kW]' in elem) ]
+
     channel_number_Pin_Consumption_Tot = [i for i, elem in enumerate(all_channels_labels) if "Grid consumption with storage" in elem]
     channel_number_Pin_Injection_Tot = [i for i, elem in enumerate(all_channels_labels) if "Grid injection with storage" in elem]
-
-
-    #channel_number_Pout_actif_Tot = [i for i, elem in enumerate(all_channels_labels) if "Pout power (ALL)" in elem]
     
     
-     
     #utilisation directe du label plutot que les indexs des columns: 
     #chanel_label_Pout_actif_tot=all_channels_labels[channel_number_Pout_actif_Tot[0]]
     chanel_label_Pin_Consumption_tot=all_channels_labels[channel_number_Pin_Consumption_Tot[0]]
-
     chanel_label_Psolar_tot=all_channels_labels[channels_number_Psolar_Tot[0]]
     chanel_label_Pin_Injection=all_channels_labels[channel_number_Pin_Injection_Tot[0]]
-    
+    channel_label_Pload_Consumption=all_channels_labels[channel_number_Pload_Consumption[0]]
+
     fig_indicators_polar, [axes_autarky, axes_selfcon],  = plt.subplots(nrows=1, ncols=2, 
                                                         figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT), 
                                                         subplot_kw={'projection': 'polar'})
@@ -655,22 +651,21 @@ def build_daily_indicators_polar_fraction_figure(day_kwh_df):
     ############################
     #Daily Energies Fractions:
     #############
-    #normalized energy production
-    normed_solar=day_kwh_df[chanel_label_Psolar_tot]/(day_kwh_df[chanel_label_Psolar_tot]+abs(day_kwh_df[chanel_label_Pin_Consumption_tot])+1e-9)*100
-    #normed_solar_reinjected=month_kwh_df[chanel_label_Psolar_tot]/(month_kwh_df[chanel_label_Psolar_tot]+abs(month_kwh_df[chanel_label_Pin_Consumption_tot])+1e-9)*100
-    normed_grid=abs(day_kwh_df[chanel_label_Pin_Consumption_tot])/(day_kwh_df[chanel_label_Psolar_tot]+abs(day_kwh_df[chanel_label_Pin_Consumption_tot])+1e-9)*100
+    rate_autarky=(1-abs(day_kwh_df[chanel_label_Pin_Consumption_tot])/(day_kwh_df[channel_label_Pload_Consumption] +1e-9))*100 
+    rate_selfconsumption=(1-abs(day_kwh_df[chanel_label_Pin_Injection])/(day_kwh_df[chanel_label_Psolar_tot]+1e-9))*100
     
-    normed_selfconsumption=(1-abs(day_kwh_df[chanel_label_Pin_Injection])/(day_kwh_df[chanel_label_Psolar_tot]+1e-9))*100
+    #to link the points:
+    #rate_autarky[-1]=rate_autarky[0]
+    #rate_selfconsumption[-1]=rate_selfconsumption[0]
 
-    
     ind = day_kwh_df.index.dayofyear/365
-    theta = 2 * np.pi * ind
+    theta = 2 * np.pi * ind - 2 * np.pi/len(day_kwh_df) #start first day vertically
 
-    p1=axes_autarky.plot(theta, normed_solar.values, color=SOLAR_COLOR,  linewidth=3)
-    p1_s=axes_autarky.fill_between(theta, normed_solar.values, color=SOLAR_COLOR,  alpha=0.5)
+    p1=axes_autarky.plot(theta, rate_autarky.values, color=SOLAR_COLOR,  linewidth=3)
+    p1_s=axes_autarky.fill_between(theta, rate_autarky.values, color=SOLAR_COLOR,  alpha=0.5)
     
-    p2=axes_selfcon.plot(theta, normed_selfconsumption.values, color=GENSET_COLOR,  linewidth=3)
-    p2_s=axes_selfcon.fill_between(theta, normed_selfconsumption.values, color=GENSET_COLOR,  alpha=0.5)
+    p2=axes_selfcon.plot(theta, rate_selfconsumption.values, color=GENSET_COLOR,  linewidth=3)
+    p2_s=axes_selfcon.fill_between(theta, rate_selfconsumption.values, color=GENSET_COLOR,  alpha=0.5)
     
     axes_autarky.set_ylim([0, 100])
     axes_selfcon.set_ylim([0, 100])
@@ -704,6 +699,100 @@ def build_daily_indicators_polar_fraction_figure(day_kwh_df):
     
     # Add a title to the entire figure
     fig_indicators_polar.suptitle("Daily solar indicators", fontsize=14, weight="bold")
+    axes_autarky.set_title("Self-sufficiency", fontsize=12, weight="bold")
+    #axes_autarky.legend(["Self-sufficiency"]) 
+    axes_autarky.grid(True)
+
+    axes_selfcon.set_title("Self-consumption", fontsize=12, weight="bold")
+    #axes_selfcon.legend(["Self-consumption"]) 
+    axes_selfcon.grid(True)
+
+    #fig_indicators_polar.figimage(im, 10, 10, zorder=3, alpha=.2)
+    #fig_indicators_polar.savefig("FigureExport/energy_indicators_polar.png")
+
+    return fig_indicators_polar
+
+
+
+def build_monthly_indicators_polar_figure(day_kwh_df):
+
+    
+    all_channels_labels=list(day_kwh_df.columns)
+    
+    #####################################
+    # the channels with SYSTEM Power 
+    
+    channels_number_Psolar_Tot = [i for i, elem in enumerate(all_channels_labels) if 'Solar power scaled' in elem]
+    channel_number_Pload_Consumption = [i for i, elem in enumerate(all_channels_labels) if ('Consumption [kW]' in elem) ]
+
+    channel_number_Pin_Consumption_Tot = [i for i, elem in enumerate(all_channels_labels) if "Grid consumption with storage" in elem]
+    channel_number_Pin_Injection_Tot = [i for i, elem in enumerate(all_channels_labels) if "Grid injection with storage" in elem]
+    
+    
+    #utilisation directe du label plutot que les indexs des columns: 
+    #chanel_label_Pout_actif_tot=all_channels_labels[channel_number_Pout_actif_Tot[0]]
+    chanel_label_Pin_Consumption_tot=all_channels_labels[channel_number_Pin_Consumption_Tot[0]]
+    chanel_label_Psolar_tot=all_channels_labels[channels_number_Psolar_Tot[0]]
+    chanel_label_Pin_Injection=all_channels_labels[channel_number_Pin_Injection_Tot[0]]
+    channel_label_Pload_Consumption=all_channels_labels[channel_number_Pload_Consumption[0]]
+
+    fig_indicators_polar, [axes_autarky, axes_selfcon],  = plt.subplots(nrows=1, ncols=2, 
+                                                        figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT), 
+                                                        subplot_kw={'projection': 'polar'})
+    
+    
+    ############################
+    #Daily Energies Fractions:
+    #############
+    rate_autarky=(1-abs(day_kwh_df[chanel_label_Pin_Consumption_tot])/(day_kwh_df[channel_label_Pload_Consumption] +1e-9))*100 
+    rate_selfconsumption=(1-abs(day_kwh_df[chanel_label_Pin_Injection])/(day_kwh_df[chanel_label_Psolar_tot]+1e-9))*100
+    
+    
+    ind = day_kwh_df.index.dayofyear/365
+    theta = 2 * np.pi * ind - 2 * np.pi/len(day_kwh_df) #start first day vertically
+    bar_width = 2 * np.pi / len(theta)   # width for one day
+
+    axes_autarky.bar(theta, rate_autarky.values,
+                 width=bar_width,
+                 color=SOLAR_COLOR, alpha=0.8)
+
+    
+    p2=axes_selfcon.bar(theta, rate_selfconsumption.values, 
+                        width=bar_width,
+                        color=GENSET_COLOR, alpha=0.8)
+    
+    axes_autarky.set_ylim([0, 100])
+    axes_selfcon.set_ylim([0, 100])
+
+    #plt.xticks(ind, labels=list(day_kwh_df.index.month_name()), rotation=30, ha = 'right')        
+    labels_month=["January", "March", "June", "September"]
+    labels_month_full=["January", "\nFebruary",  "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    
+
+            
+    loc, label = plt.xticks()
+    loc = [0, np.pi/2, np.pi, np.pi*3/2]
+    loc_full = np.arange(12)*np.pi/6
+    axes_autarky.set_xticks(loc_full,labels=labels_month_full) #,rotation=35)
+    #axes_selfcon.set_xticks(loc[0:3],labels=labels_month[0:3]) #,rotation=35)
+    #axes_selfcon.set_xticks(loc_full[0:9],labels=labels_month_full[0:9]) #,rotation=35)
+    axes_selfcon.set_xticks(loc_full,labels=labels_month_full) #,rotation=35)
+
+    loc_y=[20, 40, 60, 80, 100]
+    label_y=["20%", "40%", "60%", "80%", "100%"]
+    axes_autarky.set_yticks(loc_y,labels=label_y) #,rotation=35)
+    axes_selfcon.set_yticks(loc_y,labels=label_y) #,rotation=35)
+
+
+    axes_autarky.set_theta_zero_location("N")  # theta=0 at the top
+    axes_autarky.set_theta_direction(-1)  # theta increasing clockwise
+    axes_selfcon.set_theta_zero_location("N")  # theta=0 at the top
+    axes_selfcon.set_theta_direction(-1)  # theta increasing clockwise
+
+    #axes_indicator.set_ylabel("Energy fraction [%]", fontsize=12)
+    
+    # Add a title to the entire figure
+    fig_indicators_polar.suptitle("Monthly solar indicators", fontsize=14, weight="bold")
     axes_autarky.set_title("Self-sufficiency", fontsize=12, weight="bold")
     #axes_autarky.legend(["Self-sufficiency"]) 
     axes_autarky.grid(True)

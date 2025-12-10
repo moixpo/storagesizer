@@ -961,6 +961,7 @@ else:
 
 
 
+st.write(f" Note: the selfconsumption power of storage system of {INVERTER_STANDBY_W: .1f} watts, that is {INVERTER_STANDBY_W*24/1000} kWh/day. Plus there is an efficiency of 0.95 counted.")
 
 
 #st.markdown("---")
@@ -999,9 +1000,10 @@ fig_polar_indicators = build_daily_indicators_polar_fraction_figure(day_kwh_df)
 st.pyplot(fig_polar_indicators)
 
 
+fig_polar_indicators2 = build_monthly_indicators_polar_figure(month_kwh_df)
+st.pyplot(fig_polar_indicators2)
 
 
-st.write(f" Note: the selfconsumption power of storage system of {INVERTER_STANDBY_W: .1f} Watt, that is {INVERTER_STANDBY_W*24/1000} kWh/day. Plus there is an efficiency of 0.95 counted.")
 
 
 
