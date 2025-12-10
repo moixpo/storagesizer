@@ -742,15 +742,21 @@ def build_monthly_indicators_polar_figure(day_kwh_df):
     
     
     ############################
-    #Daily Energies Fractions:
+    #Monthly Energies Fractions:
     #############
     rate_autarky=(1-abs(day_kwh_df[chanel_label_Pin_Consumption_tot])/(day_kwh_df[channel_label_Pload_Consumption] +1e-9))*100 
     rate_selfconsumption=(1-abs(day_kwh_df[chanel_label_Pin_Injection])/(day_kwh_df[chanel_label_Psolar_tot]+1e-9))*100
     
-    
-    ind = day_kwh_df.index.dayofyear/365
-    theta = 2 * np.pi * ind - 2 * np.pi/len(day_kwh_df) #start first day vertically
-    bar_width = 2 * np.pi / len(theta)   # width for one day
+    #drop the last one due to the 1 minute of january of the next year: TODO: make it cleaner
+    rate_autarky.drop(rate_autarky.index[-1], inplace = True )
+    rate_selfconsumption.drop(rate_selfconsumption.index[-1] , inplace = True)
+
+
+    ind = rate_autarky.index.dayofyear/365
+    #ind = np.linspace(0, 2*np.pi, len(rate_autarky))
+    theta = 2 * np.pi * ind - 2 * np.pi/len(rate_autarky) #start first day vertically
+    #theta = 2 * np.pi * ind - 2 * np.pi/len(rate_autarky) #start first day vertically
+    bar_width = 2 * np.pi / (len(theta)+1)   # width for one day
 
     axes_autarky.bar(theta, rate_autarky.values,
                  width=bar_width,
