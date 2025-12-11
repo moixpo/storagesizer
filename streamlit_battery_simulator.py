@@ -65,7 +65,7 @@ with st.sidebar:
     st.markdown("---")
     st.write("**Choose a dataset  🏠** ")
 
-    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv", "Community1.csv", "School1.csv","Industry1.csv" ]
+    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv", "Community1.csv", "School1.csv","Industry1.csv"] #, "House6_partial.csv"
     dataset_choice = st.selectbox("Choose one option:", options)
  
     st.write("your data set :", dataset_choice, " is measured on:")
@@ -87,7 +87,10 @@ with st.sidebar:
     elif dataset_choice == "School1.csv":
         st.write("Large school with a PV roof")            
     elif dataset_choice == "Industry1.csv":
-        st.write("Industrial site with a PV roof")            
+        st.write("Industrial site with a PV roof")   
+    elif dataset_choice == "House6_partial.csv":
+        st.write("3 months of house 2")   
+     
 
 
     st.markdown("---")
@@ -198,7 +201,7 @@ with st.sidebar:
 
 
     st.markdown("---")
-    st.write("Battery sizer, version 0.7")
+    st.write("Battery sizer, version 0.8")
     st.write("✌️ Moix P-O, 2025")
     st.write("Streamlit for interactive dashboards...")
     
@@ -256,7 +259,8 @@ df_pow_profile["Time"] = pd.to_datetime(df_pow_profile["Time"])
 #Use Time  as index:
 df_pow_profile = df_pow_profile.set_index("Time")
 
-
+#remove all holes in data and set to 0.0 to avoid to have to clean the csv before
+df_pow_profile.replace(np.nan, 0.0, inplace=True)  #TODO: more intelligent replace, like copying the previous day...
 
 # # Show dataset preview
 # st.write("📋 **Data Overview**")
@@ -622,14 +626,12 @@ if opt_to_use_optimal_discharging:
 solar_system.run_storage_simulation(print_res=False)
 
 
-#and retrieve the grid power and inject it in the dataframe:
-grid_power_with_storage_array = solar_system.net_grid_balance_profile
-df_pow_profile["Grid with storage"] = grid_power_with_storage_array 
+#and retrieve the results for grid power and inject it in the dataframe:
+df_pow_profile["Grid with storage"] =  solar_system.net_grid_balance_profile
 
 #The losses due to PV injection limitation is
 df_pow_profile["PV curtailment"] = solar_system.lostproduction_profile
 curtailment_lost_energy_kWh =df_pow_profile["PV curtailment"].sum()/4.0
-
 
 
 battery_power_array = solar_system.clamped_batt_pow_profile
@@ -996,8 +998,6 @@ fig_soc_profile.update_layout(
 st.plotly_chart(fig_soc_profile)
 
 
-fig_polar_indicators = build_daily_indicators_polar_fraction_figure(day_kwh_df)
-st.pyplot(fig_polar_indicators)
 
 
 fig_polar_indicators2 = build_monthly_indicators_polar_figure(month_kwh_df)
@@ -1041,6 +1041,19 @@ if opt_to_display_plots:
         )
     )
     st.plotly_chart(fig_combined)
+
+
+    fig_polar_indicators = build_daily_indicators_polar_fraction_figure(day_kwh_df)
+    st.pyplot(fig_polar_indicators)
+
+    
+    #And here make a plot for the polar autarky to make a video
+    polar_plot_video_True = False
+    if polar_plot_video_True:
+        fig_polar_indicators.suptitle(f" Daily indicators for {battery_size_kwh_usr_input :.0f} kWh of battery", fontsize=16, weight="bold")
+        fig_polar_indicators.savefig(f"frames/frame_polar_{int(battery_size_kwh_usr_input):03d}.png", dpi=300)
+        print(f"creation polar {battery_size_kwh_usr_input} kWh")
+
 
 
 
@@ -1148,11 +1161,7 @@ if opt_to_display_plots:
 
 
 
-    st.write("The consumption and production seen differently as heatmaps")
-
-
-    fig_consumption_heatmap = build_consumption_heatmap_figure(hours_mean_df)
-    st.pyplot(fig_consumption_heatmap)
+    st.write("The production seen differently as heatmaps")
 
     fig_production_heatmap = build_production_heatmap_figure(hours_mean_df)
     st.pyplot(fig_production_heatmap)
@@ -1201,6 +1210,32 @@ if opt_to_display_plots:
     fig_scat4 = build_power_profile(df_pow_profile, "Smart Charging")
     st.pyplot(fig_scat4)
 
+
+
+
+
+#**********************************
+st.markdown("---")
+st.subheader(" More about the consumption profile 💡 ")
+#**********************************
+opt_to_display_consumption_details = st.checkbox("Show this part of analysis about consumption if necessary. That adds time to each simulation to display it")
+
+if opt_to_display_consumption_details:
+    st.write("Here the consumption is visualized under different ways. ")
+
+
+
+    st.write("The consumption seen as heatmap")
+    fig_consumption_heatmap = build_consumption_heatmap_figure(hours_mean_df)
+    st.pyplot(fig_consumption_heatmap)
+    
+    st.write("The mean consumption profile by hour of the day")
+    fig_consumption_profile = build_power_profile(df_pow_profile, "Consumption")
+    st.pyplot(fig_consumption_profile)
+
+    st.write("Are the consumption and production well aligned?  if not, is it possible to move the consumption during the production time?")
+    fig_polar_consumption = build_polar_consumption_profile(df_pow_profile)
+    st.pyplot(fig_polar_consumption, use_container_width=False)
 
 
 #**********************************
@@ -1542,7 +1577,7 @@ if opt_to_display_3D:
     status_text = st.empty()
     current_iter = 0
 
-
+    k_frames = 0
     # Loop over indices and values
     for row, sol in enumerate(solar_range):
         #print("Solar swipe: ", sol) #to see the advance
@@ -1595,6 +1630,7 @@ if opt_to_display_3D:
                 f"Simulation {current_iter}/{total_iters} "
                 f"(PV scale = {sol} %, Battery = {bat} kWh)"
             )
+
 
     # Create meshgrid for 3D plot
     A, B = np.meshgrid(battery_range, solar_range)
@@ -1731,7 +1767,7 @@ if opt_to_display_3D:
     st.plotly_chart(fig_bill)
 
 
-
+    #Make the video of the rotation of the surfaces:
     if False:
         # video avec fig_go 
         fig = fig_go
@@ -1773,7 +1809,28 @@ if opt_to_display_3D:
                 frame = imageio.imread(f"frames/frame_{i:03d}.png")
                 video.append_data(frame)
 
-        print("🎉 Vidéo créée : rotation_plot.mp4")
+        print("Vidéo créée : rotation_plot.mp4")
+
+        
+
+#Make the video of the varying indicators for the battery variants:
+polar_plot_video_True = False
+
+if polar_plot_video_True:
+    fps = 2
+    # --- créer la vidéo mp4 ---
+    with imageio.get_writer("polar_plot.mp4", fps=fps) as video:
+        for i in range(51):
+            #check that the file exists: 
+            filename = f"frames/frame_polar_{i:03d}.png"
+            if os.path.exists(filename):
+                print(filename)
+                frame = imageio.imread(filename)
+                video.append_data(frame)
+
+    print("Vidéo créée : polar_plot.mp4")
+
+
 
 
 # #**********************************

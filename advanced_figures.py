@@ -7,6 +7,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import datetime 
 
 #figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT)
 FIGSIZE_WIDTH=14
@@ -654,6 +655,16 @@ def build_daily_indicators_polar_fraction_figure(day_kwh_df):
     rate_autarky=(1-abs(day_kwh_df[chanel_label_Pin_Consumption_tot])/(day_kwh_df[channel_label_Pload_Consumption] +1e-9))*100 
     rate_selfconsumption=(1-abs(day_kwh_df[chanel_label_Pin_Injection])/(day_kwh_df[chanel_label_Psolar_tot]+1e-9))*100
     
+    e_grid_conso = day_kwh_df[chanel_label_Pin_Consumption_tot].sum()
+    e_grid_inject = day_kwh_df[chanel_label_Pin_Injection].sum()
+    e_load_conso = day_kwh_df[channel_label_Pload_Consumption].sum()
+    e_solar_prod = day_kwh_df[chanel_label_Psolar_tot].sum()
+
+
+    rate_autarky_annual = (1-e_grid_conso/(e_load_conso + 1e-9))*100.0
+    #print(f'Annual autarky: {rate_autarky_annual : .1f}')
+    rate_selfconsumption_annual = (1-abs(e_grid_inject/(e_solar_prod+1e-9)))*100.0
+
     #to link the points:
     #rate_autarky[-1]=rate_autarky[0]
     #rate_selfconsumption[-1]=rate_selfconsumption[0]
@@ -699,11 +710,11 @@ def build_daily_indicators_polar_fraction_figure(day_kwh_df):
     
     # Add a title to the entire figure
     fig_indicators_polar.suptitle("Daily solar indicators", fontsize=14, weight="bold")
-    axes_autarky.set_title("Self-sufficiency", fontsize=12, weight="bold")
+    axes_autarky.set_title(f"Self-sufficiency \n Annual value: {rate_autarky_annual : .1f} %", fontsize=12, weight="bold")
     #axes_autarky.legend(["Self-sufficiency"]) 
     axes_autarky.grid(True)
 
-    axes_selfcon.set_title("Self-consumption", fontsize=12, weight="bold")
+    axes_selfcon.set_title(f"Self-consumption \n Annual value: {rate_selfconsumption_annual : .1f} %", fontsize=12, weight="bold")
     #axes_selfcon.legend(["Self-consumption"]) 
     axes_selfcon.grid(True)
 
@@ -746,7 +757,17 @@ def build_monthly_indicators_polar_figure(day_kwh_df):
     #############
     rate_autarky=(1-abs(day_kwh_df[chanel_label_Pin_Consumption_tot])/(day_kwh_df[channel_label_Pload_Consumption] +1e-9))*100 
     rate_selfconsumption=(1-abs(day_kwh_df[chanel_label_Pin_Injection])/(day_kwh_df[chanel_label_Psolar_tot]+1e-9))*100
-    
+    e_grid_conso = day_kwh_df[chanel_label_Pin_Consumption_tot].sum()
+    e_grid_inject = day_kwh_df[chanel_label_Pin_Injection].sum()
+    e_load_conso = day_kwh_df[channel_label_Pload_Consumption].sum()
+    e_solar_prod = day_kwh_df[chanel_label_Psolar_tot].sum()
+
+
+    rate_autarky_annual = (1-e_grid_conso/(e_load_conso + 1e-9))*100.0
+    #print(f'Annual autarky: {rate_autarky_annual : .1f}')
+    rate_selfconsumption_annual = (1-abs(e_grid_inject/(e_solar_prod+1e-9)))*100.0
+    #print(f'Annual selfc: {rate_selfconsumption_annual/4 : .1f} % e_grid_inject = {e_grid_inject} and solar ={e_solar_prod}')
+
     #drop the last one due to the 1 minute of january of the next year: TODO: make it cleaner
     rate_autarky.drop(rate_autarky.index[-1], inplace = True )
     rate_selfconsumption.drop(rate_selfconsumption.index[-1] , inplace = True)
@@ -799,11 +820,11 @@ def build_monthly_indicators_polar_figure(day_kwh_df):
     
     # Add a title to the entire figure
     fig_indicators_polar.suptitle("Monthly solar indicators", fontsize=14, weight="bold")
-    axes_autarky.set_title("Self-sufficiency", fontsize=12, weight="bold")
+    axes_autarky.set_title(f"Self-sufficiency \n Annual value: {rate_autarky_annual : .1f} %", fontsize=12, weight="bold")
     #axes_autarky.legend(["Self-sufficiency"]) 
     axes_autarky.grid(True)
 
-    axes_selfcon.set_title("Self-consumption", fontsize=12, weight="bold")
+    axes_selfcon.set_title(f"Self-consumption \n Annual value: {rate_selfconsumption_annual : .1f} %", fontsize=12, weight="bold")
     #axes_selfcon.legend(["Self-consumption"]) 
     axes_selfcon.grid(True)
 
@@ -811,4 +832,107 @@ def build_monthly_indicators_polar_figure(day_kwh_df):
     #fig_indicators_polar.savefig("FigureExport/energy_indicators_polar.png")
 
     return fig_indicators_polar
+
+
+
+
+def build_polar_consumption_profile(total_datalog_df, start_date = datetime.date(2000, 1, 1), end_date = datetime.date(2050, 12, 31)):
+    #for tests:
+    #start_date = dt.date(2018, 7, 1)
+    #end_date = dt.date(2018, 8, 30) 
+    
+    temp1 = total_datalog_df[total_datalog_df.index.date >= start_date]
+    temp2 = temp1[temp1.index.date <= end_date]
+
+    month_name =temp2.index[0].month
+    year_name =temp2.index[0].year
+
+    all_channels_labels = list(total_datalog_df.columns)
+    channel_number_consumption = [i for i, elem in enumerate(all_channels_labels) if 'Consumption' in elem]
+    channels_number_solar = [i for i, elem in enumerate(all_channels_labels) if 'Solar power scaled' in elem]
+
+    #channel_number=channel_number_Pout_conso_Tot
+    time_of_day_in_hours=list(temp2.index.hour+temp2.index.minute/60)
+    time_of_day_in_minutes=list(temp2.index.hour*60+temp2.index.minute)
+    
+    #add a channels to the dataframe with minutes of the day to be able to sort data on it: 
+    #Create a new entry in the dataframe:
+    temp2['Time of day in minutes']=time_of_day_in_minutes
+        
+    FIGSIZE_WIDTH = 6
+    FIGSIZE_HEIGHT = 5     
+    fig_pow_by_min_of_day, axes_pow_by_min_of_day = plt.subplots(nrows=1, ncols=1, 
+                                                                 figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT), 
+                                                                 subplot_kw={'projection': 'polar'})
+    
+    axes_pow_by_min_of_day.set_theta_zero_location("S")  # theta=0 at the botom
+    axes_pow_by_min_of_day.set_theta_direction(-1)  # theta increasing clockwise
+    
+    #maybe it is empty if there is no inverter:
+    if channel_number_consumption and channels_number_solar:
+        
+        channel_label_consumption=all_channels_labels[channel_number_consumption[0]]
+        channel_label_solar=all_channels_labels[channels_number_solar[0]]
+
+        # axes_pow_by_min_of_day.plot(np.array(time_of_day_in_hours)/24*2*np.pi,
+        #                   temp2[channel_label_consumption].values, 
+        #                   marker='+',
+        #                   alpha=0.15,
+        #                   color='b',
+        #                   linestyle='None')
+       
+        
+
+        #faire la moyenne de tous les points qui sont à la même 15 minute du jour:
+        mean_by_minute = np.zeros(24*4)
+        mean_by_minute_sol = np.zeros(24*4)
+
+        x1=np.array(range(0 , 24*4))
+        for k in x1:
+            tem_min_pow1=temp2[temp2['Time of day in minutes'].values == k*15]
+            mean_by_minute[k]=np.nanmean(tem_min_pow1[channel_label_consumption].values)
+            
+            tem_min_pow_sol1=temp2[temp2['Time of day in minutes'].values == k*15]
+            mean_by_minute_sol[k]=np.nanmean(tem_min_pow_sol1[channel_label_solar].values)
+   
+    
+        axes_pow_by_min_of_day.plot(x1/24/4*2*np.pi, mean_by_minute,
+                          color=LOAD_COLOR,
+                          linestyle ='-',
+                          linewidth=2)
+        
+        axes_pow_by_min_of_day.plot(x1/24/4*2*np.pi, mean_by_minute_sol,
+                          color=SOLAR_COLOR,
+                          linestyle ='-',
+                          linewidth=2)
+    
+
+        
+
+        ticks = np.linspace(0, 2 * np.pi, 8, endpoint=False)
+        
+        axes_pow_by_min_of_day.set_ylim([0, max([mean_by_minute.max(), mean_by_minute_sol.max()])])
+
+        axes_pow_by_min_of_day.set_xticks(ticks)
+        axes_pow_by_min_of_day.set_xticklabels(['midnight', '3h', '6h', '9h', '12h', '15h', '18h', '21h'])
+        #mean power:
+        #axes_pow_by_min_of_day.axhline(np.nanmean(total_datalog_df[channel_label].values), color='k', linestyle='dashed', linewidth=2)
+        #axes_pow_by_min_of_day.axhline(mean_by_minute.mean(), color='k', linestyle='dashed', linewidth=2)
+        
+        #text_to_disp='Mean power= ' + str(round(mean_by_minute.mean(), 2)) + ' kW'
+        #axes_pow_by_min_of_day.text(0.1,mean_by_minute.mean()+0.1,  text_to_disp, horizontalalignment='left',verticalalignment='bottom')
+        axes_pow_by_min_of_day.legend(["consumption mean", "solar mean",] , loc='lower right', fontsize=10) #["All points", "min mean profile" ,"hour mean profile"] , loc='upper right', fontsize=10)
+        #axes_pow_by_min_of_day.legend(["all points","minutes mean" ,"hours mean"] , loc='lower right', fontsize=10) #["All points", "min mean profile" ,"hour mean profile"] , loc='upper right', fontsize=10)
+        #axes_pow_by_min_of_day.set_ylabel("Power [kW]", fontsize=12)
+        #axes_pow_by_min_of_day.set_xlabel("Time [h]", fontsize=12)
+        #axes_pow_by_min_of_day.set_xlim(0,24)
+        #axes_pow_by_min_of_day.set_title("Mean consumption profile by time of the day \n in kW", fontsize=12, weight="bold")
+        axes_pow_by_min_of_day.set_title(f"Consumption profile around the clock \n Power in kW, average of month  {month_name} {year_name} ", fontsize=12, weight='bold')
+        axes_pow_by_min_of_day.set_title(f"Mean consumption vs solar profiles  \n in kW ", fontsize=12, weight='bold')
+        axes_pow_by_min_of_day.grid(True)
+        
+    
+  
+
+    return fig_pow_by_min_of_day
 
