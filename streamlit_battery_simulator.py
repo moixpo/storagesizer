@@ -1233,9 +1233,39 @@ if opt_to_display_consumption_details:
     fig_consumption_profile = build_power_profile(df_pow_profile, "Consumption")
     st.pyplot(fig_consumption_profile)
 
-    st.write("Are the consumption and production well aligned?  if not, is it possible to move the consumption during the production time?")
-    fig_polar_consumption = build_polar_consumption_profile(df_pow_profile)
-    st.pyplot(fig_polar_consumption, use_container_width=False)
+
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write("Are the consumption and production well aligned?  if not, is it possible to move the consumption during the production time to improve the direct self-consumption?")
+
+        period_for_polar_user = st.radio(
+            "Set period",
+            ["Winter", "Summer", "All data"],
+            captions=[
+                "January-February",
+                "June to August",
+                "All available range.",
+    ] )
+        #st.write("You selected:", period_for_polar_user)
+
+    with col2:
+        if period_for_polar_user == "All data":
+            fig_polar_consumption = build_polar_consumption_profile(df_pow_profile)
+        elif  period_for_polar_user == "Winter":
+            #for tests TODO:
+            start_date = datetime.date(2024, 1, 1)
+            end_date = datetime.date(2024, 2, 28) 
+            #df_selection = df_pow_profile[]
+            fig_polar_consumption = build_polar_consumption_profile(df_pow_profile, start_date,end_date )
+        else  :
+            #Summer
+            #for tests TODO:
+            start_date = datetime.date(2024, 6, 1)
+            end_date = datetime.date(2024, 8, 31) 
+            fig_polar_consumption = build_polar_consumption_profile(df_pow_profile, start_date, end_date )
+        st.pyplot(fig_polar_consumption, use_container_width=False)
 
 
 #**********************************
@@ -1899,7 +1929,7 @@ st.write(""" Solar, storage and optimization: the smart control 🏆
          
          The system sizing cannot be decoupled of the way it is operated, especially when there are multiple objectives 
          like peakshaving, islanding, self-consumption and variable price optimization ...
-         Here an standard inverter behaviour was implemented.
+         Here an almost standard inverter behaviour was implemented, plus a few options for peak shaving and smartcharging
          This daily energy management optimization is yet to come. It will be perfomed with day by day optimization.
          That is where the different objectives are married. It's less obvious, but not rocket science ;-) 
          
