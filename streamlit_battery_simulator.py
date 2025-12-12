@@ -1005,6 +1005,35 @@ st.pyplot(fig_polar_indicators2)
 
 
 
+st.write(" **Some results**")
+
+
+
+st.markdown(f""" ***Reference***
+- The consumption of electricity for this period is {consumption_kWh:.2f} kWh 🔌
+- The cost of grid electricity if there was no solar would have been {cost_buying_no_solar_chf:.2f} CHF , mean price is {cost_buying_no_solar_chf/consumption_kWh:.3f} CHF/kWh
+- The consumption of electricity on the grid for this period is {reference_grid_consumption_kWh:.2f} kWh with solar only
+- The cost of grid electricity is {cost_buying_solar_only_chf:.2f} CHF with solar only, mean price is {cost_buying_solar_only_chf/reference_grid_consumption_kWh:.3f} CHF/kWh
+- The lost energy due to grid-feeding limitation is {reference_curtailment_lost_energy_kwh :.0f} kWh and curtailment level is {pv_injection_curtailment_power:.2f} kW
+- The sale of PV electricity is {sellings_solar_only_chf:.2f} CHF with solar only, mean price is {sellings_solar_only_chf/reference_grid_injection_kWh:.3f} CHF/kWh
+- The total bill is {bill_with_solar_only:.2f} CHF with solar only, a gain of {cost_buying_no_solar_chf-bill_with_solar_only:.1f} CHF due to solar""")
+
+
+st.markdown(f""" ***🔋 With storage***
+- The consumption of electricity on the grid for this period is {grid_consumption_kWh_with_storage:.2f} kWh with storage
+- The energy lost due to grid feeding limitation is {curtailment_lost_energy_kWh :.0f} kWh
+- The value of the stored energy left in the battery with mean price is {storage_value:.2f} CHF
+- The cost of grid electricity is {cost_buying_solar_storage_chf:.2f} CHF with storage, mean price is {cost_buying_solar_storage_chf/grid_consumption_kWh_with_storage:.3f} CHF/kWh
+- The sale of PV electricity is {sellings_solar_storage_chf:.2f} CHF with solar only, mean price is {sellings_solar_storage_chf/grid_injection_kWh_with_storage:.3f} CHF/kWh
+- The total bill is {bill_with_storage:.2f} CHF with solar + storage, a gain of {bill_with_solar_only - bill_with_storage :.1f} CHF due to storage
+- **TOTAL gain** with solar + storage is {cost_buying_no_solar_chf - bill_with_storage :.2f} CHF """)
+
+
+st.markdown(f""" ***🔎 Some details***
+- The states of charge of the battery at beggining ({soc_array[0]:.0f} %) and end of the period ({soc_array[-1]:.0f} %) are not the same, that is {delta_e_batt:.1f} kWh and must be counted in the final price. 
+- The value of the stored energy left in the battery with mean price is {storage_value:.2f} CHF
+    """)
+
 
 
 
@@ -1167,35 +1196,6 @@ if opt_to_display_plots:
     st.pyplot(fig_production_heatmap)
 
 
-    st.write(" **Some results**")
-
-
-
-    st.markdown(f""" ***Reference***
-    - The consumption of electricity for this period is {consumption_kWh:.2f} kWh 🔌
-    - The cost of grid electricity if there was no solar would have been {cost_buying_no_solar_chf:.2f} CHF , mean price is {cost_buying_no_solar_chf/consumption_kWh:.3f} CHF/kWh
-    - The consumption of electricity on the grid for this period is {reference_grid_consumption_kWh:.2f} kWh with solar only
-    - The cost of grid electricity is {cost_buying_solar_only_chf:.2f} CHF with solar only, mean price is {cost_buying_solar_only_chf/reference_grid_consumption_kWh:.3f} CHF/kWh
-    - The lost energy due to grid-feeding limitation is {reference_curtailment_lost_energy_kwh :.0f} kWh and curtailment level is {pv_injection_curtailment_power:.2f} kW
-    - The sale of PV electricity is {sellings_solar_only_chf:.2f} CHF with solar only, mean price is {sellings_solar_only_chf/reference_grid_injection_kWh:.3f} CHF/kWh
-    - The total bill is {bill_with_solar_only:.2f} CHF with solar only, a gain of {cost_buying_no_solar_chf-bill_with_solar_only:.1f} CHF due to solar""")
-
-
-    st.markdown(f""" ***🔋 With storage***
-    - The consumption of electricity on the grid for this period is {grid_consumption_kWh_with_storage:.2f} kWh with storage
-    - The energy lost due to grid feeding limitation is {curtailment_lost_energy_kWh :.0f} kWh
-    - The value of the stored energy left in the battery with mean price is {storage_value:.2f} CHF
-    - The cost of grid electricity is {cost_buying_solar_storage_chf:.2f} CHF with storage, mean price is {cost_buying_solar_storage_chf/grid_consumption_kWh_with_storage:.3f} CHF/kWh
-    - The sale of PV electricity is {sellings_solar_storage_chf:.2f} CHF with solar only, mean price is {sellings_solar_storage_chf/grid_injection_kWh_with_storage:.3f} CHF/kWh
-    - The total bill is {bill_with_storage:.2f} CHF with solar + storage, a gain of {bill_with_solar_only - bill_with_storage :.1f} CHF due to storage
-    - **TOTAL gain** with solar + storage is {cost_buying_no_solar_chf - bill_with_storage :.2f} CHF """)
-
-
-    st.markdown(f""" ***🔎 Some details***
-    - The states of charge of the battery at beggining ({soc_array[0]:.0f} %) and end of the period ({soc_array[-1]:.0f} %) are not the same, that is {delta_e_batt:.1f} kWh and must be counted in the final price. 
-    - The value of the stored energy left in the battery with mean price is {storage_value:.2f} CHF
-        """)
-    
 
     #st.metric(label="gain with storage", value=4, delta=-0.5, delta_color="inverse")
     
