@@ -1253,19 +1253,35 @@ if opt_to_display_consumption_details:
     with col2:
         if period_for_polar_user == "All data":
             fig_polar_consumption = build_polar_consumption_profile(df_pow_profile)
+            fig_polar_prices = build_polar_prices_profile(df_pow_profile)
+
         elif  period_for_polar_user == "Winter":
             #for tests TODO:
             start_date = datetime.date(2024, 1, 1)
             end_date = datetime.date(2024, 2, 28) 
             #df_selection = df_pow_profile[]
-            fig_polar_consumption = build_polar_consumption_profile(df_pow_profile, start_date,end_date )
+            fig_polar_consumption = build_polar_consumption_profile(df_pow_profile, start_date, end_date )
+            fig_polar_prices = build_polar_prices_profile(df_pow_profile, start_date, end_date )
+
         else  :
             #Summer
             #for tests TODO:
             start_date = datetime.date(2024, 6, 1)
             end_date = datetime.date(2024, 8, 31) 
             fig_polar_consumption = build_polar_consumption_profile(df_pow_profile, start_date, end_date )
+            fig_polar_prices = build_polar_prices_profile(df_pow_profile, start_date, end_date )
+
         st.pyplot(fig_polar_consumption, use_container_width=False)
+    
+
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.pyplot(fig_polar_prices, use_container_width=False)
+    with col2:
+        st.write("A flat price is seen as a circle ... almost a joke :-)  " \
+        "\nSelect the dynamic price on the left to see something more interesting."\
+        "\n\nTo optimize the cost, the consumption on the grid should be where the potatoe is thiner")
 
 
 #**********************************

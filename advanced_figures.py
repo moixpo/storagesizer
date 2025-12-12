@@ -936,3 +936,90 @@ def build_polar_consumption_profile(total_datalog_df, start_date = datetime.date
 
     return fig_pow_by_min_of_day
 
+
+
+
+
+def build_polar_prices_profile(total_datalog_df, start_date = datetime.date(2000, 1, 1), end_date = datetime.date(2050, 12, 31)):
+    #for tests:
+    #start_date = dt.date(2018, 7, 1)
+    #end_date = dt.date(2018, 8, 30) 
+    
+    temp1 = total_datalog_df[total_datalog_df.index.date >= start_date]
+    temp2 = temp1[temp1.index.date <= end_date]
+
+    month_name =temp2.index[0].month
+    year_name =temp2.index[0].year
+
+    all_channels_labels = list(total_datalog_df.columns)
+    channel_number_buy = [i for i, elem in enumerate(all_channels_labels) if 'price buy' in elem]
+    channels_number_sell = [i for i, elem in enumerate(all_channels_labels) if 'price sell PV' in elem]
+
+    #channel_number=channel_number_Pout_conso_Tot
+    time_of_day_in_hours=list(temp2.index.hour+temp2.index.minute/60)
+    time_of_day_in_minutes=list(temp2.index.hour*60+temp2.index.minute)
+    
+    #add a channels to the dataframe with minutes of the day to be able to sort data on it: 
+    #Create a new entry in the dataframe:
+    temp2['Time of day in minutes']=time_of_day_in_minutes
+        
+    FIGSIZE_WIDTH = 6
+    FIGSIZE_HEIGHT = 5     
+    fig_pow_by_min_of_day, axes_pow_by_min_of_day = plt.subplots(nrows=1, ncols=1, 
+                                                                 figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT), 
+                                                                 subplot_kw={'projection': 'polar'})
+    
+    axes_pow_by_min_of_day.set_theta_zero_location("S")  # theta=0 at the botom
+    axes_pow_by_min_of_day.set_theta_direction(-1)  # theta increasing clockwise
+    
+    #maybe it is empty if there is no inverter:
+    if channel_number_buy and channels_number_sell:
+        
+        channel_label_buy=all_channels_labels[channel_number_buy[0]]
+        channel_label_sell=all_channels_labels[channels_number_sell[0]]
+
+        axes_pow_by_min_of_day.plot(np.array(time_of_day_in_hours)/24*2*np.pi,
+                          temp2[channel_label_buy].values, 
+                          marker='+',
+                          alpha=0.15,
+                          color=NX_BLUE,
+                          linestyle='None')
+       
+        
+        #faire la moyenne de tous les points qui sont à la même 15 minute du jour:
+        mean_by_minute = np.zeros(24*4)
+        mean_by_minute_sol = np.zeros(24*4)
+
+        x1=np.array(range(0 , 24*4))
+        for k in x1:
+            tem_min_pow1=temp2[temp2['Time of day in minutes'].values == k*15]
+            mean_by_minute[k]=np.nanmean(tem_min_pow1[channel_label_buy].values)
+            
+            tem_min_pow_sol1=temp2[temp2['Time of day in minutes'].values == k*15]
+            mean_by_minute_sol[k]=np.nanmean(tem_min_pow_sol1[channel_label_sell].values)
+   
+    
+        axes_pow_by_min_of_day.plot(x1/24/4*2*np.pi, mean_by_minute,
+                          color=NX_PINK,
+                          linestyle ='-',
+                          linewidth=2)
+        
+        axes_pow_by_min_of_day.plot(x1/24/4*2*np.pi, mean_by_minute_sol,
+                          color=NX_GREEN,
+                          linestyle ='-',
+                          linewidth=2)
+    
+
+        ticks = np.linspace(0, 2 * np.pi, 8, endpoint=False)
+        
+        #axes_pow_by_min_of_day.set_ylim([0, max([mean_by_minute.max(), mean_by_minute_sol.max()])])
+        axes_pow_by_min_of_day.set_xticks(ticks)
+        axes_pow_by_min_of_day.set_xticklabels(['midnight', '3h', '6h', '9h', '12h', '15h', '18h', '21h'])
+        axes_pow_by_min_of_day.legend(["Buy price all points", "Buy mean price", "Solar sell price",] , loc='lower right', fontsize=10) #["All points", "min mean profile" ,"hour mean profile"] , loc='upper right', fontsize=10)
+        axes_pow_by_min_of_day.set_title(f"Prices profiles around the clock \n  in CHF/kWh", fontsize=12, weight='bold')
+        axes_pow_by_min_of_day.grid(True)
+        
+    
+  
+
+    return fig_pow_by_min_of_day
