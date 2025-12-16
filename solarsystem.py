@@ -4,8 +4,8 @@
 #Moix P-O
 #Albedo Engineering 
 #MIT license
-#last modif 1 avril 2024
-#last modif 6 august 2024
+#last modif 1 avril 2017
+#last modif 6 august 2017
 #last modif 7 april 2025
 #last modif 5 sept 2025
 #last modif 5 nov 2025

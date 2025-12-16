@@ -87,7 +87,7 @@ with st.sidebar:
     elif dataset_choice == "School1.csv":
         st.write("Large school with a PV roof")            
     elif dataset_choice == "Industry1.csv":
-        st.write("Industrial site with a PV roof")   
+        st.write("Industrial site with a PV roof, warning dates are not the original one (seen on the week analysis, to be corrected)")   
     elif dataset_choice == "House6_partial.csv":
         st.write("3 months of house 2")   
      
@@ -155,7 +155,7 @@ with st.sidebar:
 
         peak_price_usr_input = 12.0 * st.slider("Price for the peak power (CHF/kW max year/month): ", min_value=0.0, max_value=20.0, value=0.0, step=0.1) #TODO: adapt to the size of the dataset, here is the hypothesis of 12 months
 
-        #st.markdown(  "<span style='color:red; font-size:18pt'><b> WARNING, this price is not used in the final result with a real batt simulation yet </b></span>",  unsafe_allow_html=True)
+        #st.markdown(  "<span style='color:red, font-size:18pt'><b> WARNING, this price is not used in the final result with a real batt simulation yet </b></span>",  unsafe_allow_html=True)
     else :
         peak_price_usr_input = 0.0
         peak_shaving_user_input = 100.0
@@ -537,7 +537,7 @@ if opt_to_use_smart_charging:
                 peak_search_level = peak_search_level + step * direction
 
             
-            #the exact match is found, use one with a margin; TODO: for days with not much energy in the afternoon take more margin, for days with a lot of afternoon sun that shoudl be sufficient: 
+            #the exact match is found, use one with a margin, TODO: for days with not much energy in the afternoon take more margin, for days with a lot of afternoon sun that shoudl be sufficient: 
             peak_array = scaled_excess - peak_search_level * MARGIN_FACTOR_ON_RECHARGE
             #remove negative value and compute energy of the peak
             peak_array[peak_array < 0] = 0.0
@@ -1218,22 +1218,26 @@ if opt_to_display_plots:
 st.markdown("---")
 st.subheader(" More about the consumption profile 💡 ")
 #**********************************
-opt_to_display_consumption_details = st.checkbox("Show this part of analysis about consumption if necessary. That adds time to each simulation to display it")
+opt_to_display_consumption_details = st.checkbox("Show this part of analysis about consumption if necessary. That adds time to each simulation to display it.")
 
 if opt_to_display_consumption_details:
     st.write("Here the consumption is visualized under different ways. ")
 
 
 
-    st.write("The consumption seen as heatmap")
+    st.write("The consumption seen as heatmap, here every hour of consumption of the year is displayed, organised by day of the year and hour of the day.")
     fig_consumption_heatmap = build_consumption_heatmap_figure(hours_mean_df)
     st.pyplot(fig_consumption_heatmap)
-    
-    st.write("The mean consumption profile by hour of the day")
+
+    st.write("The consumption of every day of the year, organised by day of the week and every week.")
+    fig_daily_energies_heatmap = build_daily_energies_heatmap_figure(day_kwh_df)
+    st.pyplot(fig_daily_energies_heatmap)
+
+    st.write("The mean consumption profile by hour of the day will show a at what time of the day generally is the consumption by makin the average power for each hour.")
     fig_consumption_profile = build_power_profile(df_pow_profile, "Consumption")
     st.pyplot(fig_consumption_profile)
 
-
+    year_used = df_pow_profile.index.year[0]
 
     col1, col2 = st.columns(2)
 
@@ -1254,25 +1258,32 @@ if opt_to_display_consumption_details:
         if period_for_polar_user == "All data":
             fig_polar_consumption = build_polar_consumption_profile(df_pow_profile)
             fig_polar_prices = build_polar_prices_profile(df_pow_profile)
+            fig_consumption_week_analysis = build_consumption_week_analysis(df_pow_profile)
+
 
         elif  period_for_polar_user == "Winter":
             #for tests TODO:
-            start_date = datetime.date(2024, 1, 1)
-            end_date = datetime.date(2024, 2, 28) 
+            start_date = datetime.date(year_used, 1, 1)
+            end_date = datetime.date(year_used, 2, 28) 
             #df_selection = df_pow_profile[]
             fig_polar_consumption = build_polar_consumption_profile(df_pow_profile, start_date, end_date )
             fig_polar_prices = build_polar_prices_profile(df_pow_profile, start_date, end_date )
+            fig_consumption_week_analysis = build_consumption_week_analysis(df_pow_profile, start_date=start_date , end_date=end_date )
 
         else  :
             #Summer
             #for tests TODO:
-            start_date = datetime.date(2024, 6, 1)
-            end_date = datetime.date(2024, 8, 31) 
+            start_date = datetime.date(year_used, 6, 1)
+            end_date = datetime.date(year_used, 8, 31) 
             fig_polar_consumption = build_polar_consumption_profile(df_pow_profile, start_date, end_date )
             fig_polar_prices = build_polar_prices_profile(df_pow_profile, start_date, end_date )
+            fig_consumption_week_analysis = build_consumption_week_analysis(df_pow_profile, start_date=start_date , end_date=end_date )
 
         st.pyplot(fig_polar_consumption, use_container_width=False)
     
+    
+    st.write("the consumption is generally varying through the week and through the year. The electrical heating (direct or with heat pump) is generally dominant in winter.")
+    st.pyplot(fig_consumption_week_analysis)
 
     
     col1, col2 = st.columns(2)
@@ -1307,7 +1318,7 @@ if opt_to_display_peak:
     
     """)
 
-    #st.markdown("<span style='color:red ; font-size:25pt'><b> TODO: Complete this part </b></span>", unsafe_allow_html=True)
+    #st.markdown("<span style='color:red , font-size:25pt'><b> TODO: Complete this part </b></span>", unsafe_allow_html=True)
 
 
     st.write("📋 **Reference without storage, ☀️ only**")
@@ -1493,7 +1504,7 @@ if opt_to_display_bkup:
     st.write(""" Here the reserve time on battery in case of blackout (how long is it possible to supply the coming consumption with the battery in islanding 🏝 🏭)
 
     """)
-    #st.markdown("<span style='color:red ; font-size:25pt'><b> TODO: Complete this part </b></span>", unsafe_allow_html=True)
+    #st.markdown("<span style='color:red , font-size:25pt'><b> TODO: Complete this part </b></span>", unsafe_allow_html=True)
 
 
 
@@ -1947,7 +1958,7 @@ st.write(""" Solar, storage and optimization: the smart control 🏆
          like peakshaving, islanding, self-consumption and variable price optimization ...
          Here an almost standard inverter behaviour was implemented, plus a few options for peak shaving and smartcharging
          This daily energy management optimization is yet to come. It will be perfomed with day by day optimization.
-         That is where the different objectives are married. It's less obvious, but not rocket science ;-) 
+         That is where the different objectives are married. It's less obvious, but not rocket science ,-) 
          
          Then there will be real world control: to apply this strategy to the inverter (next3 of Studer-Innotec of course...), 
          transmit the orders with the API or locally with Modbus... 

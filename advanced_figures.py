@@ -1023,3 +1023,247 @@ def build_polar_prices_profile(total_datalog_df, start_date = datetime.date(2000
   
 
     return fig_pow_by_min_of_day
+
+
+
+def build_consumption_week_analysis(total_datalog_df, day_of_week_wanted = 1, start_date = datetime.date(2000, 1, 1), end_date = datetime.date(2050, 12, 31) ):
+
+
+    #take only the wanted column:
+    all_channels_labels = list(total_datalog_df.columns)
+    channel_number = [i for i, elem in enumerate(all_channels_labels) if "Consumption" in elem]
+    channel_label=all_channels_labels[channel_number[0]]
+
+    load_df=total_datalog_df[[channel_label]]
+
+    # make the sorting filter with the given dates: 
+    temp1 = load_df[load_df.index.date >= start_date]
+    temp2 = temp1[temp1.index.date <= end_date]
+
+    time_of_week_in_minutes=list(temp2.index.dayofweek*60*24 + temp2.index.hour*60+temp2.index.minute)
+    time_of_week_in_hours=list(temp2.index.dayofweek*24 + temp2.index.hour + temp2.index.minute/60)
+    time_of_week_in_days=list(temp2.index.dayofweek + temp2.index.hour/24 + temp2.index.minute/60/24)
+
+    
+    #add a channels to the dataframe with minutes of the day to be able to sort data on it: 
+    #Create a new entry in the dataframe:
+    temp2['Time of week in minutes']=time_of_week_in_minutes
+    temp2['Time of week in hours']=time_of_week_in_hours
+
+        
+    fig_pow_by_min_of_week, axes_pow_by_min_of_day = plt.subplots(nrows=1, ncols=1, figsize=(FIGSIZE_WIDTH, FIGSIZE_HEIGHT))
+    
+    
+    axes_pow_by_min_of_day.plot(time_of_week_in_days,
+                        temp2[channel_label].values, 
+                        marker='+',
+                        alpha=0.25,
+                        color='b',
+                        linestyle='None')
+    
+    
+
+    #faire la moyenne de tous les points qui sont à la même quart d'heure du jour:
+    mean_by_minute=np.zeros(24*4*7)
+    x1=np.array(range(0,24*4*7))
+    for k in x1:
+        tem_min_pow1=temp2[temp2['Time of week in minutes'].values == k*15]
+        mean_by_minute[k]=np.nanmean(tem_min_pow1[channel_label].values)
+        
+
+    axes_pow_by_min_of_day.plot(x1/4/24, mean_by_minute,
+                        color='r',
+                        linestyle ='-',
+                        linewidth=2,
+                        drawstyle='steps-post')
+
+    #faire la moyenne de tous les points qui sont à la même heure:
+    mean_by_hour=np.zeros(24*7)
+    x2=np.array(range(0,24*7))
+    for k in x2:
+        tem_min_pow2=temp2[temp2['Time of week in hours'].values == k]
+        mean_by_hour[k]=np.nanmean(tem_min_pow2[channel_label].values)
+        
+
+    axes_pow_by_min_of_day.plot(x2/24, mean_by_hour,
+                        color='g',
+                        linestyle ='-',
+                        linewidth=2,
+                        drawstyle='steps-post')
+    
+    #mean power:
+    #axes_pow_by_min_of_day.axhline(np.nanmean(total_datalog_df[channel_label].values), color='k', linestyle='dashed', linewidth=2)
+    axes_pow_by_min_of_day.axhline(mean_by_minute.mean(), color='k', linestyle='dashed', linewidth=2)
+    text_to_disp='Mean = ' + str(round(mean_by_minute.mean(), 2)) + ' '
+    axes_pow_by_min_of_day.text(0.1,mean_by_minute.mean()+0.1,  text_to_disp, horizontalalignment='left',verticalalignment='bottom')
+    axes_pow_by_min_of_day.legend(["All points", "quarter mean profile" ,"hour mean profile"])
+    axes_pow_by_min_of_day.set_ylabel("Power [kW]", fontsize=12)
+    axes_pow_by_min_of_day.set_xlabel("Day of the week", fontsize=12)
+    axes_pow_by_min_of_day.set_xlim(0,7)
+
+    xticks_wanted = range(7) #np.arange(0.5,7.5,1)
+    axes_pow_by_min_of_day.set_xticks(xticks_wanted)
+    DAYS = ['Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat','Sun']
+    axes_pow_by_min_of_day.set_xticklabels(DAYS, ha='left')
+
+    axes_pow_by_min_of_day.set_title("Profile for every day of the week" , fontsize=12, weight="bold")
+    axes_pow_by_min_of_day.grid(True)
+    
+    # make the sorting with the day of the week
+    #temp3 = temp2[temp2.index.dayofweek ==  day_of_week_wanted]
+    #fig_power_profile_of_the_day_of_week = build_power_profile(temp3,channel_label_Pout_actif_Tot)
+
+    return fig_pow_by_min_of_week
+
+
+def build_daily_energies_heatmap_figure(day_kwh_df):
+    
+    all_channels_labels = list(day_kwh_df.columns)
+    channel_number_Pout_actif_Tot = [i for i, elem in enumerate(all_channels_labels) if "Consumption" in elem]
+    channel_label_Pout_actif_Tot=day_kwh_df.columns[channel_number_Pout_actif_Tot]
+
+    
+    
+
+    ###############################
+    #HEAT MAP OF THE DAY ENERGY
+    ###############################
+    
+    #help and inspiration:
+    #https://scipython.com/book/chapter-7-matplotlib/examples/a-heatmap-of-boston-temperatures/
+    #https://vietle.info/post/calendarheatmap-python/
+    
+    
+    #select last year of data:
+    last_year=day_kwh_df.index.year[-1]
+    last_year=day_kwh_df.index.year[0]  #TODO: clean the stuff with the two years...
+
+    temp1=day_kwh_df[day_kwh_df.index.year == last_year]
+    energies_of_the_year=temp1[channel_label_Pout_actif_Tot]
+    #TODO: put NaN in missing days...
+    
+    #select the year before
+    year_before=last_year-1
+    temp2=day_kwh_df[day_kwh_df.index.year == year_before]
+    energies_of_the_yearbefore=temp2[channel_label_Pout_actif_Tot]
+    
+    
+    # Define Ticks
+    DAYS = ['Sun', 'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat']
+    MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'July', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec']
+    
+    if energies_of_the_yearbefore.empty:    
+        #then we have only one year of data :
+        number_of_graph=1
+        cal={str(last_year): energies_of_the_year}
+        fig, ax = plt.subplots(number_of_graph, 1, figsize = (15,6))
+        fig.suptitle('Energy consumption in kWh/day in the last year', fontweight = 'bold', fontsize = 12) 
+        
+        val=str(last_year)
+        
+        start = cal.get(val).index.min()
+        end = cal.get(val).index.max()
+        start_sun = start - np.timedelta64((start.dayofweek + 1) % 7, 'D')
+        end_sun =  end + np.timedelta64(7 - end.dayofweek -1, 'D')
+    
+        num_weeks = (end_sun - start_sun).days // 7
+        heatmap = np.full([7, num_weeks], np.nan)    
+        ticks = {}
+        y = np.arange(8) - 0.5
+        x = np.arange(num_weeks + 1) - 0.5
+        for week in range(num_weeks):
+            for day in range(7):
+                date = start_sun + np.timedelta64(7 * week + day, 'D')
+                if date.day == 1:
+                    ticks[week] = MONTHS[date.month - 1]
+                if date.dayofyear == 1:
+                    ticks[week] += f'\n{date.year}'
+                if start <= date <= end:
+                    heatmap[day, week] = cal.get(val).loc[date, energies_of_the_year.columns[0]]
+        mesh = ax.pcolormesh(x, y, heatmap, cmap = 'jet', edgecolors = 'grey')  #cmap = 'jet' cmap = 'inferno'  cmap = 'magma'
+    
+        ax.invert_yaxis()
+    
+        # Set the ticks.
+        ax.set_xticks(list(ticks.keys()))
+        ax.set_xticklabels(list(ticks.values()))
+        ax.set_yticks(np.arange(7))
+        ax.set_yticklabels(DAYS)
+        ax.set_ylim(6.5,-0.5)
+        ax.set_aspect('equal')
+        ax.set_title(val, fontsize = 15)
+    
+        # Hatch for out of bound values in a year
+        ax.patch.set(hatch='xx', edgecolor='black')
+        fig.colorbar(mesh, ax=ax)
+        
+    
+    else:
+        #then we have two years of data and we can plot two graphs:
+        number_of_graph=2
+        cal={str(year_before): energies_of_the_yearbefore, str(last_year): energies_of_the_year}
+        fig, ax = plt.subplots(number_of_graph, 1, figsize = (15,6))
+        fig.suptitle('Energy consumption in kWh/day in the last 2 years', fontweight = 'bold', fontsize = 12)
+      
+        
+        #for i, val in enumerate(['2018', '2019']):
+        for i, val in enumerate(list(cal.keys())):
+            
+            start = cal.get(val).index.min()
+            end = cal.get(val).index.max()
+            start_sun = start - np.timedelta64((start.dayofweek + 1) % 7, 'D')
+            end_sun =  end + np.timedelta64(7 - end.dayofweek -1, 'D')
+        
+            num_weeks = (end_sun - start_sun).days // 7
+            heatmap = np.full([7, num_weeks], np.nan)    
+            ticks = {}
+            y = np.arange(8) - 0.5
+            x = np.arange(num_weeks + 1) - 0.5
+            for week in range(num_weeks):
+                for day in range(7):
+                    date = start_sun + np.timedelta64(7 * week + day, 'D')
+                    if date.day == 1:
+                        ticks[week] = MONTHS[date.month - 1]
+                    if date.dayofyear == 1:
+                        ticks[week] += f'\n{date.year}'
+                    if start <= date <= end:
+                        heatmap[day, week] = cal.get(val).loc[date, energies_of_the_year.columns[0]]
+            mesh = ax[i].pcolormesh(x, y, heatmap, cmap = 'jet', edgecolors = 'grey')  #cmap = 'jet' cmap = 'inferno'  cmap = 'magma'
+        
+            ax[i].invert_yaxis()
+        
+            # Set the ticks.
+            ax[i].set_xticks(list(ticks.keys()))
+            ax[i].set_xticklabels(list(ticks.values()))
+            ax[i].set_yticks(np.arange(7))
+            ax[i].set_yticklabels(DAYS)
+            ax[i].set_ylim(6.5,-0.5)
+            ax[i].set_aspect('equal')
+            ax[i].set_title(val, fontsize = 15)
+        
+            # Hatch for out of bound values in a year
+            ax[i].patch.set(hatch='xx', edgecolor='black')
+            fig.colorbar(mesh, ax=ax[i])
+        
+        
+        # Add color bar at the bottom
+        #cbar_ax = fig.add_axes([0.25, 0.10, 0.5, 0.05])
+        #fig.colorbar(mesh, orientation="vertical", pad=0.2, cax = cbar_ax)
+        #fig.colorbar(mesh, orientation="horizontal", pad=0.2, cax = ax)
+        
+        
+        #colorbar = ax[0].collections[0].colorbar
+        #r = colorbar.vmax - colorbar.vmin
+        
+        fig.subplots_adjust(hspace = 0.5)
+    
+    
+    
+    
+    
+    plt.xlabel('Map of energy consumption in kWh/day', fontsize=12)
+    
+
+
+    
+    return fig
