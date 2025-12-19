@@ -65,7 +65,7 @@ with st.sidebar:
     st.markdown("---")
     st.write("**Choose a dataset  🏠** ")
 
-    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv", "Community1.csv", "School1.csv","Industry1.csv"] #, "House6_partial.csv"
+    options = ["House1.csv", "House2.csv", "House3.csv", "House4.csv", "House5.csv", "Building1.csv", "Community1.csv", "School1.csv"] #, ,"Industry1.csv","House6_partial.csv"
     dataset_choice = st.selectbox("Choose one option:", options)
  
     st.write("your data set :", dataset_choice, " is measured on:")
@@ -1022,7 +1022,6 @@ st.markdown(f""" ***Reference***
 st.markdown(f""" ***🔋 With storage***
 - The consumption of electricity on the grid for this period is {grid_consumption_kWh_with_storage:.2f} kWh with storage
 - The energy lost due to grid feeding limitation is {curtailment_lost_energy_kWh :.0f} kWh
-- The value of the stored energy left in the battery with mean price is {storage_value:.2f} CHF
 - The cost of grid electricity is {cost_buying_solar_storage_chf:.2f} CHF with storage, mean price is {cost_buying_solar_storage_chf/grid_consumption_kWh_with_storage:.3f} CHF/kWh
 - The sale of PV electricity is {sellings_solar_storage_chf:.2f} CHF with solar only, mean price is {sellings_solar_storage_chf/grid_injection_kWh_with_storage:.3f} CHF/kWh
 - The total bill is {bill_with_storage:.2f} CHF with solar + storage, a gain of {bill_with_solar_only - bill_with_storage :.1f} CHF due to storage
